@@ -1,0 +1,13 @@
+{
+  "_comment": "Populated in Phase 10 — Normalization Layer",
+  "company_aliases": {},
+  "role_aliases": {},
+  "package_units": {
+    "lpa": "LPA",
+    "lakh": "LPA",
+    "lakhs": "LPA",
+    "lakhs per annum": "LPA",
+    "k/month": "k/month",
+    "per month": "k/month"
+  }
+}

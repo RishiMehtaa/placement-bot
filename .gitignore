@@ -1,0 +1,32 @@
+# Python
+venv/
+__pycache__/
+*.py[cod]
+*.pyo
+.pytest_cache/
+*.egg-info/
+dist/
+build/
+
+# Environment — NEVER commit secrets
+.env
+
+# Google service account — NEVER commit
+config/google_service_account.json
+
+# Logs
+logs/*.log
+logs/*.jsonl
+
+# Baileys session — contains auth tokens, never commit
+baileys/sessions/
+
+# Node
+baileys/node_modules/
+
+# VSCode
+.vscode/
+
+# OS
+.DS_Store
+Thumbs.db
