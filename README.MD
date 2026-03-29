@@ -1,191 +1,140 @@
 # WhatsApp Placement Intelligence System
 
-A production-grade system that listens to a WhatsApp placement group, extracts structured opportunity data, deduplicates it, and syncs it to Google Sheets and Google Calendar — automatically.
+An end-to-end automated system that monitors a college placement WhatsApp group, extracts structured opportunity data from unstructured messages using NLP and LLMs, and delivers it through a cross-platform Flutter dashboard — running 24/7 on AWS with zero human intervention.
 
 ---
 
-## What It Does
+## The Problem
 
-- Connects to WhatsApp via a linked device (QR scan) using Baileys — **read-only**
-- Captures messages from exactly one placement group
-- Extracts structured fields: **Company, Role, Deadline, Package, Apply Link**
-- Groups related messages into placement "families"
-- Deduplicates across 3 layers (message ID, content hash, URL normalisation)
-- Syncs clean records to **Google Sheets** and **Google Calendar**
-- Designed for local use first, with optional AWS / Azure cloud deployment
+College placement groups on WhatsApp are chaotic. Dozens of messages arrive daily — some are job postings, some are replies, some are noise. Students miss deadlines, lose apply links, and have no way to search or filter past opportunities. There is no structure, no history, no analytics.
+
+## The Solution
+
+This system sits in the background, reads every message the moment it arrives, understands it, and instantly organizes it into a clean, searchable, filterable dashboard. Every opportunity is automatically added to Google Sheets and Google Calendar. Students open the app and see everything — sorted, deduplicated, and ready to act on.
+
+---
+
+## Key Features
+
+- **Real-time processing** — every new WhatsApp message is processed and synced within seconds of arrival, no manual trigger
+- **Intelligent extraction** — multi-layer pipeline: rule-based regex → context resolution → LLM fallback (OpenAI gpt-4o-mini), used only when simpler methods fail
+- **Smart deduplication** — 3-layer system prevents duplicate entries across message ID, content hash, and normalized URLs
+- **Family grouping** — related messages (a posting + its replies + follow-up info) are grouped into a single opportunity record
+- **Google Sheets sync** — every opportunity lands in a shared spreadsheet automatically
+- **Google Calendar sync** — every deadline becomes a calendar event automatically
+- **Cross-platform Flutter app** — one codebase ships as Android app, iOS app, and web dashboard
+- **Fully automated on AWS** — runs 24/7 on EC2, survives reboots via systemd, no laptop required
 
 ---
 
 ## System Architecture
+
 ```
 WhatsApp Group
-  → Baileys (Node.js)         — read-only listener
-  → POST /ingest              — FastAPI receiver
-  → PostgreSQL                — raw message storage
-  → Queue                     — decoupled processing
-  → Processing Pipeline       — preprocess → regex → context → LLM → normalize
-  → Family Records            — structured placement opportunities
-  → Google Sheets             — human-readable output
-  → Google Calendar           — deadline tracking
-  → React Dashboard           — optional frontend (Phase 18)
+    │
+    ▼
+Baileys Listener (Node.js)         ← read-only, runs on EC2
+    │  POST each message instantly
+    ▼
+FastAPI Backend (Python)           ← runs on EC2
+    │  immediately fires background processing
+    ▼
+Processing Pipeline
+    ├── Preprocessor               ← clean, normalize, detect intent
+    ├── Regex Extractor            ← deadline, package, links
+    ├── Context Resolver           ← resolve reply chains, sliding window
+    ├── LLM Extractor              ← OpenAI fallback (capped + cached)
+    └── Normalizer                 ← company/role aliases, deduplication
+    │
+    ▼
+PostgreSQL Database                ← Amazon RDS in production
+    │
+    ├──▶ Google Sheets             ← updated within seconds
+    ├──▶ Google Calendar           ← deadline events created automatically
+    └──▶ Flutter Dashboard         ← web (S3 + CloudFront) + Android + iOS
 ```
 
 ---
 
 ## Tech Stack
 
-| Layer | Technology |
-|---|---|
-| OS / IDE | Windows 11 + VSCode |
-| WhatsApp | @whiskeysockets/baileys (read-only) |
-| API | FastAPI + Pydantic + SQLAlchemy (async) |
-| Database | PostgreSQL 15+ |
-| Queue (local) | PostgreSQL-backed |
-| Queue (cloud) | AWS SQS or Azure Queue (Phase 17) |
-| LLM | OpenAI gpt-4o-mini (Phase 9 only) |
-| Google APIs | google-auth + googleapiclient via service account |
-| Frontend | React + Vite (Phase 18 only) |
-| Runtime | Python 3.12 + Node.js LTS |
+**Backend**
+- Python 3.12, FastAPI, SQLAlchemy (async), Pydantic
+- Node.js LTS, @whiskeysockets/baileys
+- PostgreSQL 15
+- OpenAI gpt-4o-mini (LLM fallback, rate-capped, response-cached)
+- Google Sheets API + Google Calendar API
+
+**Infrastructure**
+- Docker + Docker Compose (local and production)
+- AWS EC2 t3.small (Ubuntu 22.04)
+- AWS RDS db.t3.micro PostgreSQL 15
+- AWS SQS (production message queue)
+- AWS S3 + CloudFront (Flutter web hosting)
+- systemd (auto-restart on reboot)
+
+**Frontend**
+- Flutter (single codebase → web + Android + iOS)
+- Riverpod (state management)
+- Dio (HTTP client)
+- fl_chart (analytics charts)
+- go_router (navigation)
 
 ---
 
-## Project Structure
-```
-placement_bot/
-├── baileys/
-│   ├── index.js               # WhatsApp listener (read-only)
-│   ├── package.json
-│   └── sessions/              # Baileys auth — never commit
-├── scraper/
-│   └── receiver.py            # FastAPI /ingest endpoint
-├── extraction/
-│   ├── preprocessor.py        # Text cleaning and URL extraction
-│   ├── regex_extractor.py     # Deadline and package regex
-│   ├── context_resolver.py    # Reply chain and sliding window
-│   ├── llm_extractor.py       # OpenAI fallback (Phase 9)
-│   └── normalizer.py          # Field normalisation (Phase 10)
-├── db/
-│   ├── models.py              # SQLAlchemy ORM models
-│   ├── database.py            # Async engine and session
-│   └── queries.py             # DB query helpers
-├── integrations/
-│   ├── sheets.py              # Google Sheets sync (Phase 15)
-│   └── calendar.py            # Google Calendar sync (Phase 16)
-├── utils/
-│   └── logger.py              # Structured logger (structlog)
-├── config/
-│   ├── settings.py            # Centralised settings via pydantic-settings
-│   ├── normalizations.json    # Company/role alias maps (Phase 10)
-│   └── google_service_account.json  # Never commit — add to .gitignore
-├── tests/
-├── logs/
-├── .env                       # Never commit — secrets live here
-├── requirements.txt
-└── main.py                    # Entry point
-```
+## Intelligence Pipeline
+
+Each message goes through a prioritized extraction pipeline designed to minimize LLM usage and cost:
+
+1. **Preprocessor** — strips emoji, normalizes whitespace, extracts URLs, determines if the message is placement-related at all
+2. **Regex extractor** — handles all known deadline and package formats (e.g. "25 March", "by EOD", "20 LPA", "₹50,000/month")
+3. **Context resolver** — resolves partial messages by checking reply chains (confidence 0.95) and sliding message windows (confidence 0.60)
+4. **LLM extractor** — only called when company or role cannot be determined by steps 1–3; results are cached with a 24-hour TTL; daily call limit enforced
+5. **Normalizer** — maps aliases, deduplicates URLs, enforces merge rules so no field is ever overwritten with a null
 
 ---
 
-## Build Phases
+## Flutter Dashboard
+
+Three screens built from a single codebase, fully responsive across mobile, tablet, and desktop:
+
+**Dashboard** — live count cards (total opportunities, deadlines this week, new today), sortable and filterable opportunity table, search by company or role
+
+**Opportunity Detail** — full record with all contributing messages, apply link, deadline countdown
+
+**Analytics** — bar chart of top hiring companies, line chart of opportunities over time, role distribution, salary distribution
+
+---
+
+## Automation Design
+
+Once deployed to AWS, the system requires zero human action:
+
+- Baileys runs 24/7 as a Docker container managed by systemd
+- Every incoming WhatsApp message is immediately processed as an async background task
+- Google Sheets and Calendar are updated within seconds of each new message
+- A background scheduler runs every 2 hours as a safety net, retrying any messages that failed processing
+- All processing is idempotent — running the same message twice produces identical final state
+- The system survives EC2 reboots automatically via systemd
+
+---
+
+## Project Status
 
 | Phase | Description | Status |
 |---|---|---|
-| 0 | Environment Setup | ✅ Complete |
-| 1 | Baileys WhatsApp Listener | 🔲 |
-| 2 | FastAPI Receiver | 🔲 |
-| 3 | PostgreSQL Schema | 🔲 |
-| 4 | Ingest → Database Integration | 🔲 |
-| 5 | Queue Integration | 🔲 |
-| 6 | Preprocessing Layer | 🔲 |
-| 7 | Regex Extraction | 🔲 |
-| 8 | Context Resolution | 🔲 |
-| 9 | LLM Extraction | 🔲 |
-| 10 | Normalization Layer | 🔲 |
-| 11 | Family Resolution | 🔲 |
-| 12 | Merge Engine | 🔲 |
-| 13 | Deduplication System | 🔲 |
-| 14 | Processing Loop | 🔲 |
-| 15 | Google Sheets Integration | 🔲 |
-| 16 | Google Calendar Integration | 🔲 |
-| 17 | Cloud Deployment | 🔲 |
-| 18 | React Dashboard | 🔲 |
-| 19 | Analytics Layer | 🔲 |
+| 0 | Environment setup + Docker baseline | ✅ Complete |
+| 1 | Baileys WhatsApp listener | 🔄 In Progress |
+| 2–5 | FastAPI receiver + Database + Queue | ⏳ Upcoming |
+| 6–10 | Extraction pipeline (regex + context + LLM) | ⏳ Upcoming |
+| 11–13 | Family grouping + Merge + Deduplication | ⏳ Upcoming |
+| 14 | Real-time processing loop + scheduler | ⏳ Upcoming |
+| 15–16 | Google Sheets + Calendar integration | ⏳ Upcoming |
+| 17 | AWS deployment (EC2 + RDS + SQS) | ⏳ Upcoming |
+| 18–19 | Flutter app + Analytics | ⏳ Upcoming |
 
 ---
 
-## Local Setup
+## Author
 
-### Prerequisites
-
-- Python 3.12
-- Node.js LTS (v20+)
-- PostgreSQL 15+
-- A WhatsApp account (for QR scan)
-- A Google Cloud service account with Sheets + Calendar APIs enabled
-
-### 1. Clone the repo
-```powershell
-git clone https://github.com/YOUR_USERNAME/placement-bot.git
-cd placement-bot
-```
-
-### 2. Create and activate Python virtual environment
-```powershell
-py -3.12 -m venv venv
-venv\Scripts\activate
-pip install -r requirements.txt
-```
-
-### 3. Install Node dependencies
-```powershell
-cd baileys
-npm install
-cd ..
-```
-
-### 4. Set up PostgreSQL
-```sql
-CREATE DATABASE placement_bot;
-CREATE USER placement_user WITH ENCRYPTED PASSWORD 'yourpassword';
-GRANT ALL PRIVILEGES ON DATABASE placement_bot TO placement_user;
-```
-
-### 5. Configure environment
-```powershell
-copy .env.example .env
-```
-
-Edit `.env` and fill in:
-- `DATABASE_URL` — your PostgreSQL connection string
-- `TARGET_GROUP_JID` — filled automatically after Phase 1 QR scan
-- `GOOGLE_SHEET_ID` — from your Google Sheet URL
-- `GOOGLE_CALENDAR_ID` — from Google Calendar settings
-
-### 6. Add Google service account
-
-Place your downloaded service account JSON at:
-```
-config/google_service_account.json
-```
-
-Share your Google Sheet and Calendar with the service account email.
-
-### 7. Run
-```powershell
-python main.py
-```
-
----
-
-## Security Notes
-
-- `.env` is gitignored — **never commit it**
-- `config/google_service_account.json` is gitignored — **never commit it**
-- `baileys/sessions/` is gitignored — contains WhatsApp auth tokens
-- Baileys is configured **read-only** — the bot never sends WhatsApp messages
-
----
-
-## License
-
-MIT
+Built by  [Rishi Mehta](www.linkedin.com/in/rishimehta1607) · 
