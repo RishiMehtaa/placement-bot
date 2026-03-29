@@ -1,9 +1,13 @@
 # db/database.py
-from sqlalchemy.ext.asyncio import create_async_engine, AsyncSession, async_sessionmaker
+from sqlalchemy.ext.asyncio import (
+    create_async_engine,
+    AsyncSession,
+    async_sessionmaker,
+)
 from sqlalchemy.orm import DeclarativeBase
 from config.settings import settings
 
-# Convert postgresql:// to postgresql+asyncpg:// for async driver
+# Convert postgresql:// → postgresql+asyncpg:// for async driver
 DATABASE_URL = settings.DATABASE_URL.replace(
     "postgresql://", "postgresql+asyncpg://"
 )
@@ -36,5 +40,6 @@ async def get_db():
 
 
 async def init_db():
+    """Create all tables if they don't exist. Used on FastAPI startup."""
     async with engine.begin() as conn:
         await conn.run_sync(Base.metadata.create_all)
