@@ -1,0 +1,44 @@
+version: "3.9"
+
+# AWS Production — no postgres container (RDS is external)
+# Used on EC2: docker compose -f docker-compose.prod.yml up --build -d
+
+services:
+
+  fastapi:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: fastapi
+    env_file:
+      - .env.prod
+    ports:
+      - "8000:8000"
+    volumes:
+      - ./logs:/app/logs
+      - ./config:/app/config
+    healthcheck:
+      test: ["CMD", "pg_isready", "-h", "RDS_ENDPOINT_PLACEHOLDER", "-p", "5432", "-U", "placement_user"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - placement_net
+
+  baileys:
+    build:
+      context: ./baileys
+      dockerfile: Dockerfile
+    container_name: baileys
+    env_file:
+      - .env.prod
+    volumes:
+      - ./baileys/sessions:/app/sessions
+    depends_on:
+      - fastapi
+    networks:
+      - placement_net
+
+networks:
+  placement_net:
+    driver: bridge

@@ -1,13 +1,26 @@
 {
-  "_comment": "Populated in Phase 10 — Normalization Layer",
-  "company_aliases": {},
-  "role_aliases": {},
-  "package_units": {
-    "lpa": "LPA",
-    "lakh": "LPA",
-    "lakhs": "LPA",
-    "lakhs per annum": "LPA",
-    "k/month": "k/month",
-    "per month": "k/month"
+  "company_aliases": {
+    "tcs": "TCS",
+    "infosys": "Infosys",
+    "wipro": "Wipro",
+    "hcl": "HCL Technologies",
+    "accenture": "Accenture",
+    "deloitte": "Deloitte",
+    "google": "Google",
+    "microsoft": "Microsoft",
+    "amazon": "Amazon",
+    "flipkart": "Flipkart",
+    "swiggy": "Swiggy",
+    "zomato": "Zomato"
+  },
+  "role_aliases": {
+    "sde": "Software Development Engineer",
+    "sde-1": "Software Development Engineer 1",
+    "swe": "Software Engineer",
+    "de": "Data Engineer",
+    "ds": "Data Scientist",
+    "ml engineer": "Machine Learning Engineer",
+    "ba": "Business Analyst",
+    "pm": "Product Manager"
   }
 }

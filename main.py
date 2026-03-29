@@ -1,29 +1,32 @@
-"""
-main.py
--------
-Entry point for the WhatsApp Placement Intelligence System.
-This file is expanded in each subsequent phase.
-Currently: verifies environment and logger are working correctly.
-"""
+# main.py
+# Phase 0 — minimal FastAPI app with /health endpoint
+# Full processing pipeline, scheduler, and routes added in later phases
 
+from contextlib import asynccontextmanager
+from fastapi import FastAPI
 from utils.logger import get_logger
-from config.settings import get_settings
 
 logger = get_logger(__name__)
 
 
-def main() -> None:
-    settings = get_settings()
-    logger.info(
-        "placement_bot_startup",
-        env=settings.env,
-        log_level=settings.log_level,
-        api_port=settings.api_port,
-        queue_backend=settings.queue_backend,
-        target_group_jid=settings.target_group_jid,
-    )
-    logger.info("phase_0_complete", message="Environment loaded successfully.")
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    logger.info("FastAPI startup — Phase 0 baseline")
+    yield
+    logger.info("FastAPI shutdown")
 
 
-if __name__ == "__main__":
-    main()
+app = FastAPI(
+    title="WhatsApp Placement Intelligence System",
+    version="0.1.0",
+    lifespan=lifespan
+)
+
+
+@app.get("/health")
+async def health():
+    return {
+        "status": "ok",
+        "phase": 0,
+        "message": "Placement bot is running"
+    }
