@@ -1,16 +1,17 @@
 # main.py
-# Phase 4 — full ingest pipeline with PostgreSQL queue
+# Phase 5 — queue worker wired into lifespan
 
-import uuid
+import asyncio
 from contextlib import asynccontextmanager
 from datetime import datetime, timezone
 
 from fastapi import FastAPI, BackgroundTasks, Depends, HTTPException
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from db.database import get_db, init_db
+from db.database import get_db, init_db, AsyncSessionLocal
 from db.queries import save_message
-from db.queue import enqueue, get_queue_stats
+from db.queue import enqueue, get_queue_stats, reset_stale_processing
+from worker.processor import process_single, process_pending_messages
 from scraper.receiver import MessagePayload, TEST_MESSAGES
 from utils.logger import get_logger
 from config.settings import settings
@@ -18,14 +19,58 @@ from config.settings import settings
 logger = get_logger(__name__)
 
 
+# ── Scheduler loop ────────────────────────────────────────────────────────────
+
+async def scheduler_loop():
+    """
+    Safety net — retries any unprocessed messages every SCHEDULER_INTERVAL_SECONDS.
+    This is NOT the primary processing trigger.
+    Primary processing fires immediately on /ingest as a background task.
+    """
+    while True:
+        await asyncio.sleep(settings.SCHEDULER_INTERVAL_SECONDS)
+        logger.info("Scheduler: running retry pass for unprocessed messages")
+        try:
+            await process_pending_messages()
+        except Exception as e:
+            logger.error(
+                {"error": str(e)},
+                "Scheduler encountered an error"
+            )
+
+
 # ── Lifespan ──────────────────────────────────────────────────────────────────
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    logger.info("FastAPI startup — Phase 4")
+    logger.info("FastAPI startup — Phase 5")
+
+    # Initialize DB tables
     await init_db()
     logger.info("Database tables initialized")
+
+    # Reset any items stuck in processing from a previous crashed run
+    async with AsyncSessionLocal() as db:
+        await reset_stale_processing(db)
+
+    # Start scheduler loop
+    scheduler_task = None
+    if settings.SCHEDULER_ENABLED:
+        scheduler_task = asyncio.create_task(scheduler_loop())
+        logger.info(
+            {"interval_seconds": settings.SCHEDULER_INTERVAL_SECONDS},
+            "Scheduler started"
+        )
+
     yield
+
+    # Shutdown
+    if scheduler_task:
+        scheduler_task.cancel()
+        try:
+            await scheduler_task
+        except asyncio.CancelledError:
+            pass
     logger.info("FastAPI shutdown")
 
 
@@ -33,19 +78,9 @@ async def lifespan(app: FastAPI):
 
 app = FastAPI(
     title="WhatsApp Placement Intelligence System",
-    version="0.4.0",
+    version="0.5.0",
     lifespan=lifespan,
 )
-
-
-# ── Background processing placeholder ────────────────────────────────────────
-# Full pipeline connected in Phase 14.
-
-async def process_single_message(message_id: str):
-    logger.info(
-        {"message_id": message_id},
-        "Background task triggered — full pipeline wired in Phase 14"
-    )
 
 
 # ── Routes ────────────────────────────────────────────────────────────────────
@@ -54,8 +89,10 @@ async def process_single_message(message_id: str):
 async def health():
     return {
         "status": "ok",
-        "phase": 4,
+        "phase": 5,
         "message": "Placement bot is running",
+        "scheduler_enabled": settings.SCHEDULER_ENABLED,
+        "scheduler_interval_seconds": settings.SCHEDULER_INTERVAL_SECONDS,
     }
 
 
@@ -68,10 +105,9 @@ async def ingest(
     """
     Receive a message from Baileys:
     1. Save to messages table (with deduplication)
-    2. Enqueue in queue_items table
-    3. Immediately fire background processing task
+    2. Enqueue in queue_items
+    3. Immediately fire background processing
     """
-    # Step 1: Save message (handles deduplication)
     saved, reason = await save_message(db, payload.model_dump())
 
     if not saved:
@@ -81,11 +117,8 @@ async def ingest(
             "message_id": payload.message_id,
         }
 
-    # Step 2: Enqueue
     await enqueue(db, payload.message_id)
-
-    # Step 3: Immediately trigger processing as background task
-    background_tasks.add_task(process_single_message, payload.message_id)
+    background_tasks.add_task(process_single, payload.message_id)
 
     logger.info(
         {"message_id": payload.message_id},
@@ -103,10 +136,7 @@ async def ingest_test(
     background_tasks: BackgroundTasks,
     db: AsyncSession = Depends(get_db),
 ):
-    """
-    Inject test messages without WhatsApp.
-    Development only.
-    """
+    """Inject test messages without WhatsApp. Development only."""
     if settings.ENV != "development":
         raise HTTPException(
             status_code=403,
@@ -118,20 +148,13 @@ async def ingest_test(
         saved, reason = await save_message(db, msg)
         if saved:
             await enqueue(db, msg["message_id"])
-            background_tasks.add_task(process_single_message, msg["message_id"])
+            background_tasks.add_task(process_single, msg["message_id"])
 
         results.append({
             "message_id": msg["message_id"],
             "status": "accepted" if saved else "skipped",
             "reason": reason if not saved else None,
         })
-        logger.info(
-            {
-                "message_id": msg["message_id"],
-                "status": "accepted" if saved else "skipped",
-            },
-            "Test message processed"
-        )
 
     return {
         "status": "complete",
@@ -147,7 +170,7 @@ async def list_messages(
     limit: int = 20,
     db: AsyncSession = Depends(get_db),
 ):
-    """List recently ingested messages. Used for validation."""
+    """List recently ingested messages."""
     from sqlalchemy import select
     from db.models import Message
 
@@ -178,3 +201,18 @@ async def queue_stats(db: AsyncSession = Depends(get_db)):
     """Return current queue status counts."""
     stats = await get_queue_stats(db)
     return stats
+
+
+@app.post("/queue/process")
+async def queue_process(background_tasks: BackgroundTasks):
+    """
+    Manually trigger processing of all pending queue items.
+    Used for testing and debugging only.
+    """
+    if settings.ENV != "development":
+        raise HTTPException(
+            status_code=403,
+            detail="Manual process trigger only available in development mode"
+        )
+    background_tasks.add_task(process_pending_messages)
+    return {"status": "triggered", "message": "Processing pending messages in background"}

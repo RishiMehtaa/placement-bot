@@ -125,8 +125,8 @@ Once deployed to AWS, the system requires zero human action:
 |---|---|---|
 | 0 | Environment setup + Docker baseline | ✅ Complete |
 | 1 | Baileys WhatsApp listener | ⏳ On Hold |
-| 2–5 | FastAPI receiver + Database + Queue | 🔄 Ongoing |
-| 6–10 | Extraction pipeline (regex + context + LLM) | ⏳ Upcoming |
+| 2–5 | FastAPI receiver + Database + Queue | ✅ Complete |
+| 6–10 | Extraction pipeline (regex + context + LLM) | 🔄 Ongoing |
 | 11–13 | Family grouping + Merge + Deduplication | ⏳ Upcoming |
 | 14 | Real-time processing loop + scheduler | ⏳ Upcoming |
 | 15–16 | Google Sheets + Calendar integration | ⏳ Upcoming |

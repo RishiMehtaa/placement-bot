@@ -149,3 +149,35 @@ async def get_queue_stats(db: AsyncSession) -> dict:
         "failed": stats.get("failed", 0),
         "total": sum(stats.values()),
     }
+
+async def reset_stale_processing(db: AsyncSession, older_than_minutes: int = 10):
+    """
+    Reset any queue items stuck in 'processing' status back to 'pending'.
+    This handles cases where the worker crashed mid-processing.
+    Called on FastAPI startup.
+    """
+    from sqlalchemy import func
+    from datetime import timedelta
+
+    cutoff = datetime.now(timezone.utc) - timedelta(minutes=older_than_minutes)
+
+    result = await db.execute(
+        select(QueueItem).where(
+            QueueItem.status == "processing",
+            QueueItem.started_at < cutoff,
+        )
+    )
+    stale = result.scalars().all()
+
+    for item in stale:
+        item.status = "pending"
+        item.last_error = "Reset from stale processing state on startup"
+
+    if stale:
+        await db.commit()
+        logger.warning(
+            {"count": len(stale)},
+            "Reset stale processing items to pending"
+        )
+    else:
+        logger.info("No stale processing items found")
