@@ -42,11 +42,19 @@ class Message(Base):
         nullable=False,
     )
 
-    # Relationships
+    # # Relationships
+    # replies = relationship(
+    #     "Message",
+    #     foreign_keys=[reply_to_id],
+    #     backref="parent",
+    #     lazy="select",
+    # )
+    # Self-referential relationship for reply chains
     replies = relationship(
         "Message",
         foreign_keys=[reply_to_id],
-        backref="parent",
+        primaryjoin="Message.reply_to_id == Message.message_id",
+        remote_side="Message.message_id",
         lazy="select",
     )
     family_maps = relationship(
@@ -170,3 +178,32 @@ class DeadLetterQueue(Base):
         nullable=False,
     )
     raw_payload = Column(JSONB, nullable=True)
+
+# ── Table 6: queue_items ──────────────────────────────────────────────────────
+
+class QueueItem(Base):
+    __tablename__ = "queue_items"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    message_id = Column(
+        String,
+        ForeignKey("messages.message_id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    status = Column(
+        String,
+        nullable=False,
+        default="pending",
+        index=True,
+        # Values: pending | processing | done | failed
+    )
+    enqueued_at = Column(
+        DateTime(timezone=True),
+        default=lambda: datetime.now(timezone.utc),
+        nullable=False,
+    )
+    started_at = Column(DateTime(timezone=True), nullable=True)
+    completed_at = Column(DateTime(timezone=True), nullable=True)
+    attempts = Column(Integer, default=0, nullable=False)
+    last_error = Column(Text, nullable=True)
