@@ -7,6 +7,7 @@ from sqlalchemy.ext.asyncio import (
 from sqlalchemy.orm import DeclarativeBase
 from config.settings import settings
 
+
 # Convert postgresql:// → postgresql+asyncpg:// for async driver
 DATABASE_URL = settings.DATABASE_URL.replace(
     "postgresql://", "postgresql+asyncpg://"
@@ -43,3 +44,19 @@ async def init_db():
     """Create all tables if they don't exist. Used on FastAPI startup."""
     async with engine.begin() as conn:
         await conn.run_sync(Base.metadata.create_all)
+
+from contextlib import asynccontextmanager
+
+@asynccontextmanager
+async def get_db_context():
+    """
+    Async context manager for database sessions.
+    Used by worker/processor.py for background tasks outside of FastAPI request scope.
+    """
+    async with AsyncSessionLocal() as session:
+        try:
+            yield session
+            await session.commit()
+        except Exception:
+            await session.rollback()
+            raise

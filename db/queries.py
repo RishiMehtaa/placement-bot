@@ -42,15 +42,12 @@ async def save_message(db: AsyncSession, payload: dict) -> tuple[bool, str]:
 
     # Layer 1: message_id deduplication
     if await message_exists(db, message_id):
-        logger.info({"message_id": message_id}, "Skipped — duplicate message_id")
+        logger.info(f"Skipped — duplicate message_id: {message_id}")
         return False, "duplicate_message_id"
 
     # Layer 2: content hash deduplication
     if await content_hash_exists(db, content_hash):
-        logger.info(
-            {"message_id": message_id, "content_hash": content_hash},
-            "Skipped — duplicate content hash"
-        )
+        logger.info(f"Skipped — duplicate content hash: {message_id} hash={content_hash}")
         return False, "duplicate_content_hash"
 
     # Parse timestamp
@@ -75,7 +72,7 @@ async def save_message(db: AsyncSession, payload: dict) -> tuple[bool, str]:
     db.add(message)
     await db.commit()
 
-    logger.info({"message_id": message_id}, "Message saved")
+    logger.info(f"Message saved: {message_id}")
     return True, "saved"
 
 
@@ -129,7 +126,7 @@ async def create_family(db: AsyncSession, data: dict) -> Family:
     db.add(family)
     await db.commit()
     await db.refresh(family)
-    logger.info({"family_id": str(family.id)}, "Family created")
+    logger.info(f"Family created: {family.id}")
     return family
 
 
@@ -220,14 +217,7 @@ async def map_message_to_family(
     )
     db.add(mapping)
     await db.commit()
-    logger.info(
-        {
-            "message_id": message_id,
-            "family_id": str(family_id),
-            "role": contribution_role,
-        },
-        "Message mapped to family"
-    )
+    logger.info(f"Message mapped to family: {message_id} -> {family_id} role={contribution_role}")
 
 
 # ── SheetsSync queries ────────────────────────────────────────────────────────
@@ -282,10 +272,7 @@ async def add_to_dead_letter(
     )
     db.add(entry)
     await db.commit()
-    logger.warning(
-        {"message_id": message_id, "reason": failure_reason},
-        "Added to dead letter queue"
-    )
+    logger.warning(f"Added to dead letter queue: {message_id} reason={failure_reason}")
 
 
 async def get_dead_letter_entries(
@@ -297,3 +284,5 @@ async def get_dead_letter_entries(
         .limit(limit)
     )
     return result.scalars().all()
+
+

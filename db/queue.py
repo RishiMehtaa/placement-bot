@@ -34,10 +34,7 @@ async def enqueue(db: AsyncSession, message_id: str) -> QueueItem:
     )
     existing = result.scalar_one_or_none()
     if existing:
-        logger.info(
-            {"message_id": message_id, "status": existing.status},
-            "Message already in queue — skipping enqueue"
-        )
+        logger.info(f"Message already in queue — skipping enqueue: {message_id} status={existing.status}")
         return existing
 
     item = QueueItem(
@@ -50,10 +47,7 @@ async def enqueue(db: AsyncSession, message_id: str) -> QueueItem:
     await db.commit()
     await db.refresh(item)
 
-    logger.info(
-        {"message_id": message_id, "queue_id": item.id},
-        "Message enqueued"
-    )
+    logger.info(f"Message enqueued: {message_id} queue_id={item.id}")
     return item
 
 
@@ -82,7 +76,7 @@ async def dequeue_pending(
 
     await db.commit()
 
-    logger.info({"count": len(items)}, "Dequeued items for processing")
+    logger.info(f"Dequeued {len(items)} items for processing")
     return items
 
 
@@ -97,7 +91,7 @@ async def mark_done(db: AsyncSession, message_id: str):
         )
     )
     await db.commit()
-    logger.info({"message_id": message_id}, "Queue item marked done")
+    logger.info(f"Queue item marked done: {message_id}")
 
 
 async def mark_failed(
@@ -117,18 +111,12 @@ async def mark_failed(
     if item.attempts >= MAX_ATTEMPTS:
         item.status = "failed"
         item.last_error = error
-        logger.warning(
-            {"message_id": message_id, "attempts": item.attempts},
-            "Queue item permanently failed — max attempts reached"
-        )
+        logger.warning(f"Queue item permanently failed — max attempts reached: {message_id} attempts={item.attempts}")
     else:
         # Reset to pending for retry
         item.status = "pending"
         item.last_error = error
-        logger.warning(
-            {"message_id": message_id, "attempts": item.attempts},
-            "Queue item failed — will retry"
-        )
+        logger.warning(f"Queue item failed — will retry: {message_id} attempts={item.attempts}")
 
     await db.commit()
 
@@ -175,9 +163,6 @@ async def reset_stale_processing(db: AsyncSession, older_than_minutes: int = 10)
 
     if stale:
         await db.commit()
-        logger.warning(
-            {"count": len(stale)},
-            "Reset stale processing items to pending"
-        )
+        logger.warning(f"Reset {len(stale)} stale processing items to pending")
     else:
-        logger.info("No stale processing items found")
+        logger.info(f"No stale processing items found")
