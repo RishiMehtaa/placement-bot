@@ -286,3 +286,33 @@ async def get_dead_letter_entries(
     return result.scalars().all()
 
 
+async def get_message(db: AsyncSession, message_id: str) -> Optional[Message]:
+    """
+    Fetch the full Message ORM object by message_id.
+    Returns None if not found.
+    Used by Stage 3 context resolver which needs reply_to_id,
+    reply_to_preview, sender, and timestamp fields.
+    """
+    result = await db.execute(
+        select(Message).where(Message.message_id == message_id)
+    )
+    return result.scalar_one_or_none()
+
+
+async def get_window_messages(
+    db: AsyncSession,
+    before_timestamp,
+    limit: int = 5,
+) -> list[Message]:
+    """
+    Fetch the most recent messages strictly before the given timestamp.
+    Used by Stage 3 sliding window context resolution.
+    Returns up to `limit` messages, ordered most-recent-first.
+    """
+    result = await db.execute(
+        select(Message)
+        .where(Message.timestamp < before_timestamp)
+        .order_by(Message.timestamp.desc())
+        .limit(limit)
+    )
+    return list(result.scalars().all())
