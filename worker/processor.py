@@ -3,7 +3,7 @@ Queue worker — processes messages from the queue.
 
 process_single(message_id)     — processes one message end-to-end
 process_pending_messages()     — dequeues and processes all pending items
-run_pipeline(message_id, text) — full extraction pipeline (Stage 1 live, Stages 2–8 stubs)
+run_pipeline(message_id, text) — full extraction pipeline (Stages 1-2 live, Stages 3–8 stubs)
 """
 
 import asyncio
@@ -18,6 +18,7 @@ from db.queries import (
     add_to_dead_letter,
 )
 from extraction.preprocessor import preprocess
+from extraction.regex_extractor import extract_with_regex
 from utils.logger import get_logger
 
 logger = get_logger(__name__)
@@ -34,7 +35,7 @@ async def run_pipeline(message_id: str, text: str) -> bool:
     Full extraction pipeline.
 
     Stage 1 — Preprocessor         (Phase 6 — LIVE)
-    Stage 2 — Regex Extractor       (Phase 7 — stub)
+    Stage 2 — Regex Extractor       (Phase 7 — LIVE)
     Stage 3 — Context Resolver      (Phase 8 — stub)
     Stage 4 — LLM Extractor         (Phase 9 — stub)
     Stage 5 — Normalizer            (Phase 10 — stub)
@@ -55,14 +56,21 @@ async def run_pipeline(message_id: str, text: str) -> bool:
         logger.info(
             f"[{message_id}] Message is not processable — skipping remaining stages"
         )
-        return True  # not an error — mark done cleanly
+        return True
 
     logger.debug(f"[{message_id}] Stage 1 complete — proceeding to Stage 2")
 
     # ------------------------------------------------------------------
-    # Stage 2 — Regex Extraction (Phase 7 stub)
+    # Stage 2 — Regex Extraction (Phase 7 — LIVE)
     # ------------------------------------------------------------------
-    logger.debug(f"[{message_id}] Stage 2 (regex extractor) — stub, skipping")
+    regex_fields = extract_with_regex(preprocessed)
+    logger.info(
+        f"[{message_id}] Stage 2 complete | "
+        f"deadline={regex_fields.deadline_raw!r} | "
+        f"package={regex_fields.package_raw!r} | "
+        f"jd_link={regex_fields.jd_link!r} | "
+        f"confidence={regex_fields.confidence}"
+    )
 
     # ------------------------------------------------------------------
     # Stage 3 — Context Resolution (Phase 8 stub)
