@@ -1,28 +1,23 @@
 """
-Queue worker — processes messages from the queue.
-
-process_single(message_id)     — processes one message end-to-end
-process_pending_messages()     — dequeues and processes all pending items
-run_pipeline(message)          — full extraction pipeline (Stages 1-4 live, Stages 5–8 stubs)
+Queue worker — orchestrates the full extraction pipeline.
+Stages 1–5 are live. Stages 6–8 are stubs (Phases 11–13).
 """
 
 import asyncio
-from sqlalchemy.ext.asyncio import AsyncSession
-
 from db.database import get_db_context
-from db.queue import dequeue_pending, mark_done, mark_failed
 from db.queries import (
     get_message,
     get_window_messages,
-    get_unprocessed_messages,
     mark_message_processed,
     increment_process_attempts,
     add_to_dead_letter,
 )
+from db.queue import dequeue_pending, mark_done, mark_failed
 from extraction.preprocessor import preprocess
 from extraction.regex_extractor import extract_with_regex
 from extraction.context_resolver import resolve_context
-from extraction.llm_extractor import extract_with_llm          # NEW: Stage 4
+from extraction.llm_extractor import extract_with_llm
+from extraction.normalizer import normalize, NormalizedRecord
 from utils.logger import get_logger
 
 logger = get_logger(__name__)
@@ -31,177 +26,154 @@ MAX_ATTEMPTS = 3
 
 
 # ---------------------------------------------------------------------------
-# Pipeline
+# Stage stubs — Phases 11–13
 # ---------------------------------------------------------------------------
 
-async def run_pipeline(message) -> bool:
+async def _stage6_family_resolution(record: NormalizedRecord) -> dict:
+    """Stage 6 stub — Family Resolution (Phase 11)"""
+    logger.debug(f"[Stage 6 stub] family_resolution message_id={record.message_id}")
+    return {}
+
+
+async def _stage7_merge_engine(record: NormalizedRecord, family: dict) -> dict:
+    """Stage 7 stub — Merge Engine (Phase 12)"""
+    logger.debug(f"[Stage 7 stub] merge_engine message_id={record.message_id}")
+    return {}
+
+
+async def _stage8_deduplication(record: NormalizedRecord, merged: dict) -> None:
+    """Stage 8 stub — Deduplication (Phase 13)"""
+    logger.debug(f"[Stage 8 stub] deduplication message_id={record.message_id}")
+
+
+# ---------------------------------------------------------------------------
+# Full pipeline — run all stages for one message
+# ---------------------------------------------------------------------------
+
+async def run_pipeline(message_id: str) -> None:
     """
-    Full extraction pipeline.
-
-    Stage 1 — Preprocessor         (Phase 6 — LIVE)
-    Stage 2 — Regex Extractor       (Phase 7 — LIVE)
-    Stage 3 — Context Resolver      (Phase 8 — LIVE)
-    Stage 4 — LLM Extractor         (Phase 9 — LIVE)
-    Stage 5 — Normalizer            (Phase 10 — stub)
-    Stage 6 — Family Resolution     (Phase 11 — stub)
-    Stage 7 — Merge Engine          (Phase 12 — stub)
-    Stage 8 — Deduplication         (Phase 13 — stub)
-
-    Returns True if pipeline completed successfully, False otherwise.
-    Non-processable messages return True (not an error — just skipped gracefully).
+    Runs all pipeline stages for a single message.
+    Stages 1–5 are live. Stages 6–8 are stubs.
     """
-    message_id = message.message_id
-
-    # ------------------------------------------------------------------
-    # Stage 1 — Preprocessing
-    # ------------------------------------------------------------------
-    preprocessed = preprocess(message_id, message.text)
-
-    if not preprocessed.is_processable:
-        logger.info(
-            f"[{message_id}] Message is not processable — skipping remaining stages"
-        )
-        return True
-
-    logger.debug(f"[{message_id}] Stage 1 complete — proceeding to Stage 2")
-
-    # ------------------------------------------------------------------
-    # Stage 2 — Regex Extraction (Phase 7 — LIVE)
-    # ------------------------------------------------------------------
-    regex_fields = extract_with_regex(preprocessed)
-    logger.info(
-        f"[{message_id}] Stage 2 complete | "
-        f"deadline={regex_fields.deadline_raw!r} | "
-        f"package={regex_fields.package_raw!r} | "
-        f"jd_link={regex_fields.jd_link!r} | "
-        f"confidence={regex_fields.confidence}"
-    )
-
-    # ------------------------------------------------------------------
-    # Stage 3 — Context Resolution (Phase 8 — LIVE)
-    # ------------------------------------------------------------------
     async with get_db_context() as db:
-        window_messages = await get_window_messages(
-            db,
-            before_timestamp=message.timestamp,
-            limit=5,
+        message = await get_message(db, message_id)
+        if not message:
+            logger.warning(f"run_pipeline: message_id={message_id} not found in DB")
+            return
+
+        # Stage 1 — Preprocessor
+        preprocessed = preprocess(message_id, message.text)
+        logger.info(
+            f"[Stage 1] message_id={message_id} "
+            f"is_processable={preprocessed.is_processable} "
+            f"keywords={preprocessed.matched_keywords} "
+            f"urls={len(preprocessed.urls)}"
         )
 
-    context_fields = resolve_context(message, window_messages)
-    logger.info(
-        f"[{message_id}] Stage 3 complete | "
-        f"company={context_fields.company!r} | "
-        f"role={context_fields.role!r} | "
-        f"source={context_fields.context_source} | "
-        f"confidence={context_fields.confidence}"
-    )
+        if not preprocessed.is_processable:
+            logger.info(f"[Stage 1] Skipping non-processable message_id={message_id}")
+            await mark_message_processed(db, message_id)
+            return
 
-    # ------------------------------------------------------------------
-    # Stage 4 — LLM Extraction (Phase 9 — LIVE)
-    # ------------------------------------------------------------------
-    llm_fields = extract_with_llm(preprocessed, context_fields)
-    logger.info(
-        f"[{message_id}] Stage 4 complete | "
-        f"company={llm_fields.company!r} | "
-        f"role={llm_fields.role!r} | "
-        f"source={llm_fields.source} | "
-        f"confidence={llm_fields.confidence}"
-    )
+        # Stage 2 — Regex Extractor
+        regex_fields = extract_with_regex(preprocessed)
+        logger.info(
+            f"[Stage 2] message_id={message_id} "
+            f"deadline={regex_fields.deadline_normalized} "
+            f"package={regex_fields.package_normalized} "
+            f"jd_link={regex_fields.jd_link} "
+            f"confidence={regex_fields.confidence}"
+        )
 
-    # ------------------------------------------------------------------
-    # Stage 5 — Normalization (Phase 10 stub)
-    # ------------------------------------------------------------------
-    logger.debug(f"[{message_id}] Stage 5 (normalizer) — stub, skipping")
+        # Stage 3 — Context Resolver
+        window_messages = await get_window_messages(
+            db, before_timestamp=message.timestamp, limit=5
+        )
+        context_fields = resolve_context(message, window_messages)
+        logger.info(
+            f"[Stage 3] message_id={message_id} "
+            f"company={context_fields.company} "
+            f"role={context_fields.role} "
+            f"source={context_fields.context_source} "
+            f"confidence={context_fields.confidence}"
+        )
 
-    # ------------------------------------------------------------------
-    # Stage 6 — Family Resolution (Phase 11 stub)
-    # ------------------------------------------------------------------
-    logger.debug(f"[{message_id}] Stage 6 (family resolution) — stub, skipping")
+        # Stage 4 — LLM Extractor
+        llm_fields = extract_with_llm(preprocessed, context_fields)
+        logger.info(
+            f"[Stage 4] message_id={message_id} "
+            f"company={llm_fields.company} "
+            f"role={llm_fields.role} "
+            f"source={llm_fields.source} "
+            f"confidence={llm_fields.confidence}"
+        )
 
-    # ------------------------------------------------------------------
-    # Stage 7 — Merge Engine (Phase 12 stub)
-    # ------------------------------------------------------------------
-    logger.debug(f"[{message_id}] Stage 7 (merge engine) — stub, skipping")
+        # Stage 5 — Normalizer
+        record = normalize(preprocessed, regex_fields, context_fields, llm_fields)
+        logger.info(
+            f"[Stage 5] message_id={message_id} "
+            f"company={record.company} (source={record.company_source}) "
+            f"role={record.role} (source={record.role_source}) "
+            f"deadline={record.deadline} "
+            f"package={record.package} "
+            f"jd_link={record.jd_link} "
+            f"confidence={record.confidence}"
+        )
 
-    # ------------------------------------------------------------------
-    # Stage 8 — Deduplication (Phase 13 stub)
-    # ------------------------------------------------------------------
-    logger.debug(f"[{message_id}] Stage 8 (deduplication) — stub, skipping")
+        # Stage 6 stub — Family Resolution
+        family = await _stage6_family_resolution(record)
 
-    return True
+        # Stage 7 stub — Merge Engine
+        merged = await _stage7_merge_engine(record, family)
+
+        # Stage 8 stub — Deduplication
+        await _stage8_deduplication(record, merged)
+
+        # Mark message processed
+        await mark_message_processed(db, message_id)
+        logger.info(f"run_pipeline: complete for message_id={message_id}")
 
 
 # ---------------------------------------------------------------------------
-# Single message processor
+# Single message processor (called by /ingest background task)
 # ---------------------------------------------------------------------------
 
 async def process_single(message_id: str) -> None:
     """
-    Process one message end-to-end:
-    1. Increment attempt counter
-    2. Fetch full Message object from DB
-    3. Run pipeline
-    4. Mark done or failed
-    5. On unhandled exception: add to dead letter queue
+    Entry point for immediate background task processing.
+    Called directly by /ingest for every new message.
     """
-    logger.info(f"[{message_id}] Processing started")
-
     async with get_db_context() as db:
-        try:
-            await increment_process_attempts(db, message_id)
+        await increment_process_attempts(db, message_id)
 
-            message = await get_message(db, message_id)
-            if message is None:
-                logger.warning(f"[{message_id}] Message not found in DB — skipping")
-                await mark_failed(db, message_id, "message not found in DB")
-                return
-
-            success = await run_pipeline(message)
-
-            if success:
-                await mark_message_processed(db, message_id)
-                await mark_done(db, message_id)
-                logger.info(f"[{message_id}] Processing complete — marked done")
-            else:
-                await mark_failed(db, message_id, "pipeline returned False")
-                logger.warning(f"[{message_id}] Pipeline returned False — marked failed")
-
-        except Exception as exc:
-            error_msg = str(exc)
-            logger.error(f"[{message_id}] Unhandled exception: {error_msg}", exc_info=True)
-            await mark_failed(db, message_id, error_msg)
-            await add_to_dead_letter(db, message_id, error_msg, None)
+    try:
+        await run_pipeline(message_id)
+        async with get_db_context() as db:
+            await mark_done(db, message_id)
+        logger.info(f"process_single: done for message_id={message_id}")
+    except Exception as e:
+        logger.error(f"process_single: failed for message_id={message_id}: {e}")
+        async with get_db_context() as db:
+            await mark_failed(db, message_id, str(e))
+            await add_to_dead_letter(db, message_id, str(e), None)
 
 
 # ---------------------------------------------------------------------------
-# Batch processor (called by scheduler and on startup)
+# Batch processor (called by scheduler safety net)
 # ---------------------------------------------------------------------------
 
 async def process_pending_messages() -> None:
     """
-    Dequeue and process all currently pending messages.
-    Called by the scheduler retry loop and once at startup.
-    Each message is processed independently — one failure does not block others.
+    Dequeues up to 50 pending items and processes them concurrently.
+    Called only by the scheduler safety net — not by /ingest.
     """
-    logger.info("process_pending_messages: scanning queue for pending items")
-
     async with get_db_context() as db:
-        items = await dequeue_pending(db, limit=50)
+        pending = await dequeue_pending(db, limit=50)
 
-    if not items:
-        logger.info("process_pending_messages: no pending items found")
+    if not pending:
+        logger.info("process_pending_messages: no pending items")
         return
 
-    logger.info(f"process_pending_messages: found {len(items)} pending items")
-
-    tasks = [process_single(item.message_id) for item in items]
-    results = await asyncio.gather(*tasks, return_exceptions=True)
-
-    for item, result in zip(items, results):
-        if isinstance(result, Exception):
-            logger.error(
-                f"[{item.message_id}] gather-level exception: {result}",
-                exc_info=result,
-            )
-
-# NOTE: fetch_message_text helper removed — replaced by get_message in db/queries.py
+    logger.info(f"process_pending_messages: processing {len(pending)} items")
+    tasks = [process_single(item.message_id) for item in pending]
+    await asyncio.gather(*tasks, return_exceptions=True)
