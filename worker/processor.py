@@ -3,7 +3,7 @@ Queue worker — processes messages from the queue.
 
 process_single(message_id)     — processes one message end-to-end
 process_pending_messages()     — dequeues and processes all pending items
-run_pipeline(message)          — full extraction pipeline (Stages 1-3 live, Stages 4–8 stubs)
+run_pipeline(message)          — full extraction pipeline (Stages 1-4 live, Stages 5–8 stubs)
 """
 
 import asyncio
@@ -12,8 +12,8 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from db.database import get_db_context
 from db.queue import dequeue_pending, mark_done, mark_failed
 from db.queries import (
-    get_message,                  # CHANGED: replaces fetch_message_text
-    get_window_messages,          # NEW: for Stage 3 sliding window
+    get_message,
+    get_window_messages,
     get_unprocessed_messages,
     mark_message_processed,
     increment_process_attempts,
@@ -21,7 +21,8 @@ from db.queries import (
 )
 from extraction.preprocessor import preprocess
 from extraction.regex_extractor import extract_with_regex
-from extraction.context_resolver import resolve_context  # NEW: Stage 3
+from extraction.context_resolver import resolve_context
+from extraction.llm_extractor import extract_with_llm          # NEW: Stage 4
 from utils.logger import get_logger
 
 logger = get_logger(__name__)
@@ -33,14 +34,14 @@ MAX_ATTEMPTS = 3
 # Pipeline
 # ---------------------------------------------------------------------------
 
-async def run_pipeline(message) -> bool:  # CHANGED: accepts full Message object, not (message_id, text)
+async def run_pipeline(message) -> bool:
     """
     Full extraction pipeline.
 
     Stage 1 — Preprocessor         (Phase 6 — LIVE)
     Stage 2 — Regex Extractor       (Phase 7 — LIVE)
     Stage 3 — Context Resolver      (Phase 8 — LIVE)
-    Stage 4 — LLM Extractor         (Phase 9 — stub)
+    Stage 4 — LLM Extractor         (Phase 9 — LIVE)
     Stage 5 — Normalizer            (Phase 10 — stub)
     Stage 6 — Family Resolution     (Phase 11 — stub)
     Stage 7 — Merge Engine          (Phase 12 — stub)
@@ -49,12 +50,12 @@ async def run_pipeline(message) -> bool:  # CHANGED: accepts full Message object
     Returns True if pipeline completed successfully, False otherwise.
     Non-processable messages return True (not an error — just skipped gracefully).
     """
-    message_id = message.message_id  # CHANGED: extracted from object
+    message_id = message.message_id
 
     # ------------------------------------------------------------------
     # Stage 1 — Preprocessing
     # ------------------------------------------------------------------
-    preprocessed = preprocess(message_id, message.text)  # CHANGED: message.text
+    preprocessed = preprocess(message_id, message.text)
 
     if not preprocessed.is_processable:
         logger.info(
@@ -96,9 +97,16 @@ async def run_pipeline(message) -> bool:  # CHANGED: accepts full Message object
     )
 
     # ------------------------------------------------------------------
-    # Stage 4 — LLM Extraction (Phase 9 stub)
+    # Stage 4 — LLM Extraction (Phase 9 — LIVE)
     # ------------------------------------------------------------------
-    logger.debug(f"[{message_id}] Stage 4 (llm extractor) — stub, skipping")
+    llm_fields = extract_with_llm(preprocessed, context_fields)
+    logger.info(
+        f"[{message_id}] Stage 4 complete | "
+        f"company={llm_fields.company!r} | "
+        f"role={llm_fields.role!r} | "
+        f"source={llm_fields.source} | "
+        f"confidence={llm_fields.confidence}"
+    )
 
     # ------------------------------------------------------------------
     # Stage 5 — Normalization (Phase 10 stub)
@@ -131,7 +139,7 @@ async def process_single(message_id: str) -> None:
     """
     Process one message end-to-end:
     1. Increment attempt counter
-    2. Fetch full Message object from DB       ← CHANGED: was fetch_message_text
+    2. Fetch full Message object from DB
     3. Run pipeline
     4. Mark done or failed
     5. On unhandled exception: add to dead letter queue
@@ -142,13 +150,13 @@ async def process_single(message_id: str) -> None:
         try:
             await increment_process_attempts(db, message_id)
 
-            message = await get_message(db, message_id)  # CHANGED: full object, not just text
+            message = await get_message(db, message_id)
             if message is None:
                 logger.warning(f"[{message_id}] Message not found in DB — skipping")
                 await mark_failed(db, message_id, "message not found in DB")
                 return
 
-            success = await run_pipeline(message)  # CHANGED: pass full object
+            success = await run_pipeline(message)
 
             if success:
                 await mark_message_processed(db, message_id)
