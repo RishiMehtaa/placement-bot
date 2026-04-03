@@ -1,13 +1,14 @@
 # db/queries.py
+from uuid import UUID
 import uuid
 from datetime import datetime, timezone
 from typing import Optional
 
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select, update, insert
+from sqlalchemy import select, update, insert, func
 
 from db.models import (
-    Message, Family, MessageFamilyMap,
+    Message, Family, MessageFamilyMap, QueueItem,
     SheetsSync, DeadLetterQueue, compute_content_hash
 )
 from utils.logger import get_logger
@@ -316,3 +317,82 @@ async def get_window_messages(
         .limit(limit)
     )
     return list(result.scalars().all())
+
+
+# ---------------------------------------------------------------------------
+# Phase 11 — Family Resolver queries
+# ---------------------------------------------------------------------------
+
+async def find_family_by_company_and_role(
+    db: AsyncSession,
+    company: str,
+    role: str,
+) -> Optional[Family]:
+    """
+    Return the most recently created family matching both company and role.
+    Match is case-insensitive.
+    Returns None if no match found.
+    """
+    result = await db.execute(
+        select(Family)
+        .where(
+            func.lower(Family.company) == company.lower(),
+            func.lower(Family.role) == role.lower(),
+        )
+        .order_by(Family.created_at.desc())
+        .limit(1)
+    )
+    return result.scalar_one_or_none()
+
+
+async def find_family_by_company_only(
+    db: AsyncSession,
+    company: str,
+) -> Optional[Family]:
+    """
+    Return the most recently created family matching company, ignoring role.
+    Match is case-insensitive.
+    Returns None if no match found.
+    """
+    result = await db.execute(
+        select(Family)
+        .where(func.lower(Family.company) == company.lower())
+        .order_by(Family.created_at.desc())
+        .limit(1)
+    )
+    return result.scalar_one_or_none()
+
+
+async def get_most_recent_family(db: AsyncSession) -> Optional[Family]:
+    """
+    Return the single most recently created family regardless of company/role.
+    Returns None if the families table is empty.
+    """
+    result = await db.execute(
+        select(Family).order_by(Family.created_at.desc()).limit(1)
+    )
+    return result.scalar_one_or_none()
+
+
+async def get_family_by_id(db: AsyncSession, family_id: UUID) -> Optional[Family]:
+    """
+    Return a family by its UUID primary key.
+    Returns None if not found.
+    """
+    result = await db.execute(
+        select(Family).where(Family.id == family_id)
+    )
+    return result.scalar_one_or_none()
+
+async def get_message_family_mapping(
+    db: AsyncSession,
+    message_id: str,
+) -> Optional[MessageFamilyMap]:
+    """
+    Return the message_family_map row for a given message_id.
+    Returns None if no mapping exists.
+    """
+    result = await db.execute(
+        select(MessageFamilyMap).where(MessageFamilyMap.message_id == message_id)
+    )
+    return result.scalar_one_or_none()
