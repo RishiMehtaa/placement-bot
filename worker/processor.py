@@ -191,12 +191,17 @@ from typing import Optional
 
 from db.database import get_db_context
 from db import queries
+from db.queries import (
+    
+    map_message_to_family,
+)
 from extraction.preprocessor import preprocess
 from extraction.regex_extractor import extract_with_regex
 from extraction.context_resolver import resolve_context
 from extraction.llm_extractor import extract_with_llm
 from extraction.normalizer import normalize
 from extraction.family_resolver import resolve_family
+from extraction.merge_engine import merge_into_family
 from utils.logger import get_logger
 from extraction.llm_extractor import LLMExtractedFields
 logger = get_logger(__name__)
@@ -339,6 +344,22 @@ async def run_pipeline(message_id: str) -> None:
         # ------------------------------------------------------------------ #
         # Stage 7 — Merge Engine (Phase 12 stub)
         # ------------------------------------------------------------------ #
+        merge_result = await merge_into_family(record, resolution, db)
+        logger.info(
+            f"[Stage 7] message_id={message_id} "
+            f"family_id={merge_result.family_id} "
+            f"was_merged={merge_result.was_merged} "
+            f"updated={merge_result.updated_fields} "
+            f"skipped={merge_result.skipped_fields}"
+        )
+
+        # --- map message → family ---
+        await map_message_to_family(
+            db,
+            message_id=message_id,
+            family_id=str(resolution.family_id),
+            contribution_role=resolution.contribution_role,
+        )
         logger.info(
             "Pipeline | message=%s | Stage 7 stub — merge engine not yet built",
             message_id,
