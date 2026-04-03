@@ -17,7 +17,7 @@ This system sits in the background, reads every message the moment it arrives, u
 ## Key Features
 
 - **Real-time processing** — every new WhatsApp message is processed and synced within seconds of arrival, no manual trigger
-- **Intelligent extraction** — multi-layer pipeline: rule-based regex → context resolution → LLM fallback (OpenAI gpt-4o-mini), used only when simpler methods fail
+- **Intelligent extraction** — multi-layer pipeline: rule-based regex → context resolution → LLM fallback (Groq), used only when simpler methods fail
 - **Smart deduplication** — 3-layer system prevents duplicate entries across message ID, content hash, and normalized URLs
 - **Family grouping** — related messages (a posting + its replies + follow-up info) are grouped into a single opportunity record
 - **Google Sheets sync** — every opportunity lands in a shared spreadsheet automatically
@@ -43,7 +43,7 @@ Processing Pipeline
     ├── Preprocessor               ← clean, normalize, detect intent
     ├── Regex Extractor            ← deadline, package, links
     ├── Context Resolver           ← resolve reply chains, sliding window
-    ├── LLM Extractor              ← OpenAI fallback (capped + cached)
+    ├── LLM Extractor              ← Groq fallback (capped + cached)
     └── Normalizer                 ← company/role aliases, deduplication
     │
     ▼
@@ -62,7 +62,7 @@ PostgreSQL Database                ← Amazon RDS in production
 - Python 3.12, FastAPI, SQLAlchemy (async), Pydantic
 - Node.js LTS, @whiskeysockets/baileys
 - PostgreSQL 15
-- OpenAI gpt-4o-mini (LLM fallback, rate-capped, response-cached)
+- Groq (LLM fallback, rate-capped, response-cached)
 - Google Sheets API + Google Calendar API
 
 **Infrastructure**
