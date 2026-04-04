@@ -435,8 +435,13 @@ async def run_pipeline(message_id: str) -> None:
         # )
 
         # --- Phase 15: Google Sheets sync will be called here ---
-        logger.info("Pipeline | message=%s | Phase 15 stub — Sheets sync pending", message_id)
-
+        from integrations.sheets import sync_to_sheets
+        # Phase 15 — Sheets sync
+        sheets_ok = await sync_to_sheets(str(merge_result.family_id))
+        if sheets_ok:
+            logger.info(f"Pipeline | message={message_id} | Sheets sync complete | family_id={merge_result.family_id}")
+        else:
+            logger.warning(f"Pipeline | message={message_id} | Sheets sync failed — pipeline continues | family_id={merge_result.family_id}")
         # --- Phase 16: Google Calendar sync will be called here ---
         logger.info("Pipeline | message=%s | Phase 16 stub — Calendar sync pending", message_id)
 

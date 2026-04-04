@@ -433,3 +433,64 @@ async def get_family_by_jd_link(
     stmt = select(Family).where(Family.jd_link == normalized_url)
     result = await db.execute(stmt)
     return result.scalars().first()
+
+# ---------------------------------------------------------------------------
+# Phase 15 — Sheets sync queries
+# ---------------------------------------------------------------------------
+
+async def get_sheets_sync_record(db: AsyncSession, family_id: str):
+    """
+    Return the SheetsSync row for a given family_id, or None if not found.
+    """
+    from db.models import SheetsSync
+    result = await db.execute(
+        select(SheetsSync).where(SheetsSync.family_id == family_id)
+    )
+    return result.scalar_one_or_none()
+
+
+async def upsert_sheets_sync(
+    db: AsyncSession,
+    family_id: str,
+    sheets_row_id: Optional[str],
+    sync_status: str,
+) -> None:
+    """
+    Insert or update the sheets_sync row for a given family_id.
+    Uses a manual upsert — check then insert or update.
+    """
+    from db.models import SheetsSync
+    existing = await get_sheets_sync_record(db, family_id)
+    now = datetime.now(timezone.utc)
+
+    if existing:
+        existing.last_synced_at = now
+        if sheets_row_id is not None:
+            existing.sheets_row_id = sheets_row_id
+        existing.sync_status = sync_status
+    else:
+        record = SheetsSync(
+            family_id=family_id,
+            last_synced_at=now,
+            sheets_row_id=sheets_row_id,
+            sync_status=sync_status,
+        )
+        db.add(record)
+
+    await db.commit()
+
+
+async def update_family_sheets_row(
+    db: AsyncSession, family_id: str, sheets_row_id: str
+) -> None:
+    """
+    Update the sheets_row_id column on the families table.
+    """
+    from db.models import Family
+    result = await db.execute(
+        select(Family).where(Family.id == family_id)
+    )
+    family = result.scalar_one_or_none()
+    if family:
+        family.sheets_row_id = sheets_row_id
+        await db.commit()
