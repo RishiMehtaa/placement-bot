@@ -127,8 +127,8 @@ Once deployed to AWS, the system requires zero human action:
 | 1 | Baileys WhatsApp listener | ⏳ On Hold |
 | 2–5 | FastAPI receiver + Database + Queue | ✅ Complete |
 | 6–10 | Extraction pipeline (regex + context + LLM) | ✅ Complete |
-| 11–13 | Family grouping + Merge + Deduplication | 🔄 Upcoming |
-| 14 | Real-time processing loop + scheduler | ⏳ Upcoming |
+| 11–13 | Family grouping + Merge + Deduplication | ✅ Complete |
+| 14 | Real-time processing loop + scheduler | 🔄 Ongoing |
 | 15–16 | Google Sheets + Calendar integration | ⏳ Upcoming |
 | 17 | AWS deployment (EC2 + RDS + SQS) | ⏳ Upcoming |
 | 18–19 | Flutter app + Analytics | ⏳ Upcoming |

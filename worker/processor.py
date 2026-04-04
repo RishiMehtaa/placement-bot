@@ -180,8 +180,16 @@
 
 
 """
-Worker — Processing Pipeline
-Orchestrates Stages 1–6. Stages 7–8 remain stubs (Phase 12, Phase 13).
+Worker processor — orchestrates the full 8-stage extraction pipeline.
+
+Stage 1: Preprocessor
+Stage 2: Regex Extractor
+Stage 3: Context Resolver
+Stage 4: LLM Extractor
+Stage 5: Normalizer
+Stage 6: Family Resolver
+Stage 7: Merge Engine
+Stage 8: Deduplicator  ← now live (Phase 13)
 """
 
 from __future__ import annotations
@@ -192,7 +200,11 @@ from typing import Optional
 from db.database import get_db_context
 from db import queries
 from db.queries import (
-    
+    get_message,
+    get_unprocessed_messages,
+    get_window_messages,
+    increment_process_attempts,
+    mark_message_processed,
     map_message_to_family,
 )
 from extraction.preprocessor import preprocess
@@ -202,28 +214,48 @@ from extraction.llm_extractor import extract_with_llm
 from extraction.normalizer import normalize
 from extraction.family_resolver import resolve_family
 from extraction.merge_engine import merge_into_family
+from extraction.deduplicator import run_deduplication
 from utils.logger import get_logger
 from extraction.llm_extractor import LLMExtractedFields
 logger = get_logger(__name__)
 
+MAX_PROCESS_ATTEMPTS = 3
 
 async def run_pipeline(message_id: str) -> None:
     """
-    Full extraction pipeline for a single message.
-    Stages 1-6 live. Stages 7-8 are stubs.
+    Run the full 8-stage pipeline for a single message.
+
+    Returns True if processing succeeded, False if it failed or was skipped.
     """
     async with get_db_context() as db:
         # ------------------------------------------------------------------ #
         # Load raw message
         # ------------------------------------------------------------------ #
-        message = await queries.get_message(db, message_id)
-        if not message:
-            logger.warning("Pipeline | message=%s not found in DB", message_id)
-            return
+        # message = await queries.get_message(db, message_id)
+        # if not message:
+        #     logger.warning("Pipeline | message=%s not found in DB", message_id)
+        #     return
 
-        await queries.increment_process_attempts(db, message_id)
+        # await queries.increment_process_attempts(db, message_id)
 
-        logger.info("Pipeline | message=%s | starting", message_id)
+        # logger.info("Pipeline | message=%s | starting", message_id)
+
+        message = await get_message(db, message_id)
+        if message is None:
+            logger.warning("run_pipeline: message_id=%s not found in DB", message_id)
+            return False
+
+        if message.process_attempts >= MAX_PROCESS_ATTEMPTS:
+            logger.warning(
+                "run_pipeline: message_id=%s exceeded max attempts (%d), skipping",
+                message_id,
+                MAX_PROCESS_ATTEMPTS,
+            )
+            return False
+
+        await increment_process_attempts(db, message_id)
+
+        logger.info("run_pipeline: START message_id=%s", message_id)
 
         # ------------------------------------------------------------------ #
         # Stage 1 — Preprocessor
@@ -247,6 +279,33 @@ async def run_pipeline(message_id: str) -> None:
             len(preprocessed.urls),
             preprocessed.matched_keywords,
         )
+
+        # ------------------------------------------------------------------ #
+        # Stage 8 — Deduplication (run early, before expensive stages)       #
+        # ------------------------------------------------------------------ #
+        dedup_result = await run_deduplication(
+            message_id=message_id,
+            raw_text=message.text,
+            urls=preprocessed.urls,
+            db=db,
+        )
+        logger.info(
+            "[Stage 8] message_id=%s layers=%s should_skip=%s skip_reason=%s layer3_family=%s",
+            message_id,
+            dedup_result.layers_fired,
+            dedup_result.should_skip,
+            dedup_result.skip_reason,
+            dedup_result.layer3_duplicate_family_id,
+        )
+
+        if dedup_result.should_skip:
+            logger.info(
+                "run_pipeline: message_id=%s skipped by deduplicator — %s",
+                message_id,
+                dedup_result.skip_reason,
+            )
+            await mark_message_processed(db, message_id)
+            return True
 
         # ------------------------------------------------------------------ #
         # Stage 2 — Regex Extractor
@@ -365,13 +424,13 @@ async def run_pipeline(message_id: str) -> None:
             message_id,
         )
 
-        # ------------------------------------------------------------------ #
-        # Stage 8 — Deduplication (Phase 13 stub)
-        # ------------------------------------------------------------------ #
-        logger.info(
-            "Pipeline | message=%s | Stage 8 stub — deduplication not yet built",
-            message_id,
-        )
+        # # ------------------------------------------------------------------ #
+        # # Stage 8 — Deduplication (Phase 13 stub)
+        # # ------------------------------------------------------------------ #
+        # logger.info(
+        #     "Pipeline | message=%s | Stage 8 stub — deduplication not yet built",
+        #     message_id,
+        # )
 
         # ------------------------------------------------------------------ #
         # Mark processed

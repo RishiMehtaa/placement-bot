@@ -25,11 +25,11 @@ async def message_exists(db: AsyncSession, message_id: str) -> bool:
     return result.scalar_one_or_none() is not None
 
 
-async def content_hash_exists(db: AsyncSession, content_hash: str) -> bool:
-    result = await db.execute(
-        select(Message.message_id).where(Message.content_hash == content_hash)
-    )
-    return result.scalar_one_or_none() is not None
+# async def content_hash_exists(db: AsyncSession, content_hash: str) -> bool:
+#     result = await db.execute(
+#         select(Message.message_id).where(Message.content_hash == content_hash)
+#     )
+#     return result.scalar_one_or_none() is not None
 
 
 async def save_message(db: AsyncSession, payload: dict) -> tuple[bool, str]:
@@ -396,3 +396,40 @@ async def get_message_family_mapping(
         select(MessageFamilyMap).where(MessageFamilyMap.message_id == message_id)
     )
     return result.scalar_one_or_none()
+
+async def content_hash_exists(
+    db: AsyncSession, content_hash: str, exclude_message_id: str = ""
+) -> bool:
+    """
+    Return True if any message with this content_hash exists in the DB,
+    excluding the current message_id (so a message does not flag itself).
+    """
+    from sqlalchemy import select
+    from db.models import Message
+
+    stmt = select(Message.message_id).where(
+        Message.content_hash == content_hash,
+        Message.message_id != exclude_message_id,
+    )
+    result = await db.execute(stmt)
+    return result.first() is not None
+
+
+async def get_family_by_jd_link(
+    db: AsyncSession, normalized_url: str
+) -> "Family | None":
+    """
+    Return the first Family whose jd_link, after normalization, matches
+    normalized_url. Returns None if no match found.
+
+    Note: normalization is done at write time (Stage 8) and at query time here.
+    We query by exact match since we store normalized URLs from Phase 12 onwards.
+    For families written before Phase 13, jd_link may not be normalized —
+    this is acceptable; those families will not match until their jd_link is updated.
+    """
+    from sqlalchemy import select
+    from db.models import Family
+
+    stmt = select(Family).where(Family.jd_link == normalized_url)
+    result = await db.execute(stmt)
+    return result.scalars().first()
