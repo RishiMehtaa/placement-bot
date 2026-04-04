@@ -129,8 +129,8 @@ Once deployed to AWS, the system requires zero human action:
 | 6–10 | Extraction pipeline (regex + context + LLM) | ✅ Complete |
 | 11–13 | Family grouping + Merge + Deduplication | ✅ Complete |
 | 14 | Real-time processing loop + scheduler | ✅ Complete |
-| 15–16 | Google Sheets + Calendar integration | 🔄 Ongoing |
-| 17 | AWS deployment (EC2 + RDS + SQS) | ⏳ Upcoming |
+| 15–16 | Google Sheets + Calendar integration | ✅ Complete |
+| 17 | AWS deployment (EC2 + RDS + SQS) | 🔄 Ongoing |
 | 18–19 | Flutter app + Analytics | ⏳ Upcoming |
 
 ---

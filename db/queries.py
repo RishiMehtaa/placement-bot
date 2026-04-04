@@ -141,8 +141,12 @@ async def get_family(
 
 
 async def update_family(
-    db: AsyncSession, family_id: uuid.UUID, updates: dict
+    db: AsyncSession, family_id, updates: dict
 ) -> Optional[Family]:
+    try:
+        family_id = UUID(str(family_id)) if not isinstance(family_id, UUID) else family_id
+    except (ValueError, AttributeError):
+        return None
     """
     Merge updates into an existing family following merge rules:
     - Never overwrite a non-null field with null
@@ -184,6 +188,12 @@ async def update_family(
     new_confidence = updates.get("confidence")
     if new_confidence is not None:
         family.confidence = max(family.confidence or 0.0, new_confidence)
+
+    if updates.get("calendar_event_id"):
+        family.calendar_event_id = updates["calendar_event_id"]
+
+    if updates.get("sheets_row_id"):
+        family.sheets_row_id = updates["sheets_row_id"]
 
     family.updated_at = datetime.now(timezone.utc)
     await db.commit()
@@ -374,13 +384,13 @@ async def get_most_recent_family(db: AsyncSession) -> Optional[Family]:
     return result.scalar_one_or_none()
 
 
-async def get_family_by_id(db: AsyncSession, family_id: UUID) -> Optional[Family]:
-    """
-    Return a family by its UUID primary key.
-    Returns None if not found.
-    """
+async def get_family_by_id(db: AsyncSession, family_id) -> Optional[Family]:
+    try:
+        fid = UUID(str(family_id)) if not isinstance(family_id, UUID) else family_id
+    except (ValueError, AttributeError):
+        return None
     result = await db.execute(
-        select(Family).where(Family.id == family_id)
+        select(Family).where(Family.id == fid)
     )
     return result.scalar_one_or_none()
 

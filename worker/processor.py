@@ -211,6 +211,7 @@ from extraction.normalizer import normalize
 from extraction.family_resolver import resolve_family
 from extraction.merge_engine import merge_into_family
 from extraction.deduplicator import run_deduplication
+from integrations.calendar import sync_to_calendar
 from utils.logger import get_logger
 
 logger = get_logger(__name__)
@@ -439,11 +440,22 @@ async def run_pipeline(message_id: str) -> None:
         # Phase 15 — Sheets sync
         sheets_ok = await sync_to_sheets(str(merge_result.family_id))
         if sheets_ok:
-            logger.info(f"Pipeline | message={message_id} | Sheets sync complete | family_id={merge_result.family_id}")
+            logger.info(f"Pipeline | Stage 15 | message={message_id} | Sheets sync complete | family_id={merge_result.family_id}")
         else:
-            logger.warning(f"Pipeline | message={message_id} | Sheets sync failed — pipeline continues | family_id={merge_result.family_id}")
+            logger.warning(f"Pipeline | Stage 15 |message={message_id} | Sheets sync failed — pipeline continues | family_id={merge_result.family_id}")
         # --- Phase 16: Google Calendar sync will be called here ---
-        logger.info("Pipeline | message=%s | Phase 16 stub — Calendar sync pending", message_id)
+        calendar_ok = await sync_to_calendar(resolution.family_id)
+        if calendar_ok:
+            logger.info(
+                f"[processor] Stage 16 complete — calendar synced for family {resolution.family_id}"
+            )
+        else:
+            logger.warning(
+                f"[processor] Stage 16 skipped or failed for family {resolution.family_id} "
+                "(deadline may be null or API error — check logs above)"
+            )
+
+        logger.info(f"[processor] Pipeline complete for message {message_id}")
 
         # ------------------------------------------------------------------ #
         # Mark processed

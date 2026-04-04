@@ -291,7 +291,7 @@ app = FastAPI(
 async def health():
     return {
         "status": "ok",
-        "phase": 14,
+        "phase": 16,
         "message": "Placement bot is running",
         "scheduler_enabled": settings.SCHEDULER_ENABLED,
         "scheduler_interval_seconds": settings.SCHEDULER_INTERVAL_SECONDS,
