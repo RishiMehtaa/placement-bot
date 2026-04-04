@@ -180,16 +180,11 @@
 
 
 """
-Worker processor — orchestrates the full 8-stage extraction pipeline.
+worker/processor.py
 
-Stage 1: Preprocessor
-Stage 2: Regex Extractor
-Stage 3: Context Resolver
-Stage 4: LLM Extractor
-Stage 5: Normalizer
-Stage 6: Family Resolver
-Stage 7: Merge Engine
-Stage 8: Deduplicator  ← now live (Phase 13)
+Processing pipeline orchestrator.
+Runs all 8 stages for a single message.
+Called immediately on ingest (BackgroundTask) and by the scheduler (safety net).
 """
 
 from __future__ import annotations
@@ -206,17 +201,18 @@ from db.queries import (
     increment_process_attempts,
     mark_message_processed,
     map_message_to_family,
+    add_to_dead_letter,
 )
 from extraction.preprocessor import preprocess
 from extraction.regex_extractor import extract_with_regex
 from extraction.context_resolver import resolve_context
-from extraction.llm_extractor import extract_with_llm
+from extraction.llm_extractor import extract_with_llm, LLMExtractedFields
 from extraction.normalizer import normalize
 from extraction.family_resolver import resolve_family
 from extraction.merge_engine import merge_into_family
 from extraction.deduplicator import run_deduplication
 from utils.logger import get_logger
-from extraction.llm_extractor import LLMExtractedFields
+
 logger = get_logger(__name__)
 
 MAX_PROCESS_ATTEMPTS = 3
@@ -247,10 +243,17 @@ async def run_pipeline(message_id: str) -> None:
 
         if message.process_attempts >= MAX_PROCESS_ATTEMPTS:
             logger.warning(
-                "run_pipeline: message_id=%s exceeded max attempts (%d), skipping",
+                "run_pipeline: message_id=%s exceeded max attempts (%d), sending to dead letter",
                 message_id,
                 MAX_PROCESS_ATTEMPTS,
             )
+            await add_to_dead_letter(
+                db,
+                message_id=message_id,
+                failure_reason=f"exceeded max attempts ({MAX_PROCESS_ATTEMPTS})",
+                raw_payload={"message_id": message_id},
+            )
+            await mark_message_processed(db, message_id)
             return False
 
         await increment_process_attempts(db, message_id)
@@ -345,7 +348,6 @@ async def run_pipeline(message_id: str) -> None:
 # ------------------------------------------------------------------ #
         # Stage 4 — LLM Extractor (only when company or role still unknown)
         # ------------------------------------------------------------------ #
-        from extraction.llm_extractor import LLMExtractedFields
         if context_fields.company is None or context_fields.role is None:
             llm_fields = extract_with_llm(preprocessed, context_fields)
             logger.info(
@@ -432,19 +434,26 @@ async def run_pipeline(message_id: str) -> None:
         #     message_id,
         # )
 
+        # --- Phase 15: Google Sheets sync will be called here ---
+        logger.info("Pipeline | message=%s | Phase 15 stub — Sheets sync pending", message_id)
+
+        # --- Phase 16: Google Calendar sync will be called here ---
+        logger.info("Pipeline | message=%s | Phase 16 stub — Calendar sync pending", message_id)
+
         # ------------------------------------------------------------------ #
         # Mark processed
         # ------------------------------------------------------------------ #
         await queries.mark_message_processed(db, message_id)
         logger.info("Pipeline | message=%s | complete", message_id)
 
-
-async def process_single(message_id: str) -> None:
+async def process_single_message(message_id: str) -> None:
     """Entry point called by /ingest background task and queue worker."""
+    logger.info("[BackgroundTask] Triggered for message_id=%s", message_id)
     try:
         await run_pipeline(message_id)
+        logger.info("[BackgroundTask] Completed for message_id=%s", message_id)
     except Exception as e:
-        logger.error("Pipeline | message=%s | unhandled error: %s", message_id, e)
+        logger.error("[BackgroundTask] Unhandled error message_id=%s error=%s", message_id, e, exc_info=True)
 
 
 async def process_pending_messages() -> None:
@@ -460,4 +469,4 @@ async def process_pending_messages() -> None:
 
         logger.info("Scheduler | processing %d pending messages", len(pending))
         for msg in pending:
-            await process_single(msg.message_id)
+            await process_single_message(msg.message_id)

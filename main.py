@@ -227,7 +227,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from db.database import get_db, init_db, AsyncSessionLocal
 from db.queries import save_message
 from db.queue import enqueue, get_queue_stats, reset_stale_processing
-from worker.processor import process_single, process_pending_messages
+from worker.processor import process_single_message, process_pending_messages
 from scraper.receiver import MessagePayload, TEST_MESSAGES
 from utils.logger import get_logger
 from config.settings import settings
@@ -252,7 +252,7 @@ async def scheduler_loop():
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    logger.info("FastAPI startup - Phase 6")
+    logger.info("FastAPI startup - Phase 14")
 
     await init_db()
     logger.info("Database tables initialized")
@@ -282,7 +282,7 @@ async def lifespan(app: FastAPI):
 
 app = FastAPI(
     title="WhatsApp Placement Intelligence System",
-    version="0.6.0",
+    version="0.14.0",
     lifespan=lifespan,
 )
 
@@ -291,7 +291,7 @@ app = FastAPI(
 async def health():
     return {
         "status": "ok",
-        "phase": 6,
+        "phase": 14,
         "message": "Placement bot is running",
         "scheduler_enabled": settings.SCHEDULER_ENABLED,
         "scheduler_interval_seconds": settings.SCHEDULER_INTERVAL_SECONDS,
@@ -320,7 +320,7 @@ async def ingest(
         }
 
     await enqueue(db, payload.message_id)
-    background_tasks.add_task(process_single, payload.message_id)
+    background_tasks.add_task(process_single_message, payload.message_id)
 
     logger.info(
         "Message accepted, enqueued, background task fired: message_id=%s",
@@ -350,8 +350,7 @@ async def ingest_test(
         saved, reason = await save_message(db, msg)
         if saved:
             await enqueue(db, msg["message_id"])
-            background_tasks.add_task(process_single, msg["message_id"])
-
+            background_tasks.add_task(process_single_message, msg["message_id"])
         results.append(
             {
                 "message_id": msg["message_id"],
