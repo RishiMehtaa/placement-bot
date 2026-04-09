@@ -86,8 +86,9 @@ async def merge_into_family(
     skipped_fields: list[str] = []
 
     # --- company ---
+    # --- company ---
     if record.company is not None:
-        if family.company is None:
+        if family.company != record.company:
             updates["company"] = record.company
             updated_fields.append("company")
         else:
@@ -95,51 +96,133 @@ async def merge_into_family(
     
     # --- role ---
     if record.role is not None:
-        if family.role is None:
+        if family.role != record.role:
             updates["role"] = record.role
             updated_fields.append("role")
         else:
             skipped_fields.append("role")
+    # --- roles ---
+    if record.roles:
+        if family.roles != record.roles:
+            updates["roles"] = record.roles
+            updated_fields.append("roles")
+        else:
+            skipped_fields.append("roles")
 
+    # # --- deadline ---
+    # if record.deadline is not None:
+    #     new_deadline = _ensure_utc(record.deadline)
+    #     if family.deadline is None:
+    #         updates["deadline"] = new_deadline
+    #         updated_fields.append("deadline")
+    #     else:
+    #         existing_deadline = _ensure_utc(family.deadline)
+    #         if new_deadline > existing_deadline:
+    #             updates["deadline"] = new_deadline
+    #             updated_fields.append("deadline")
+    #         else:
+    #             skipped_fields.append("deadline")
     # --- deadline ---
     if record.deadline is not None:
         new_deadline = _ensure_utc(record.deadline)
-        if family.deadline is None:
+        existing_deadline = _ensure_utc(family.deadline)
+
+        if existing_deadline != new_deadline:
             updates["deadline"] = new_deadline
             updated_fields.append("deadline")
         else:
-            existing_deadline = _ensure_utc(family.deadline)
-            if new_deadline > existing_deadline:
-                updates["deadline"] = new_deadline
-                updated_fields.append("deadline")
-            else:
-                skipped_fields.append("deadline")
+            skipped_fields.append("deadline")
+
+    # # --- package ---
+    # if record.package is not None:
+    #     updates["package"] = record.package
+    #     updated_fields.append("package")
+    # else:
+    #     if family.package is not None:
+    #         skipped_fields.append("package")
 
     # --- package ---
+# --- package ---
     if record.package is not None:
-        updates["package"] = record.package
-        updated_fields.append("package")
-    else:
-        if family.package is not None:
+        if family.package != record.package:
+            updates["package"] = record.package
+            updated_fields.append("package")
+        else:
             skipped_fields.append("package")
-
     # --- jd_link ---
     if _is_valid_url(record.jd_link):
-        if family.jd_link is None:
+        if family.jd_link != record.jd_link:
             updates["jd_link"] = record.jd_link
             updated_fields.append("jd_link")
         else:
             skipped_fields.append("jd_link")
-    
-    # --- notes ---
-    if record.notes:
-        existing_notes = family.notes or []
-        new_notes = [n for n in record.notes if n not in existing_notes]
-        if new_notes:
-            updates["notes"] = existing_notes + new_notes
-            updated_fields.append("notes")
+
+    # --- jd_links ---
+    if record.jd_links:
+        existing_links = family.jd_links or []
+        merged_links = existing_links.copy()
+
+        for link in record.jd_links:
+            if link not in merged_links:
+                merged_links.append(link)
+
+        if merged_links != existing_links:
+            updates["jd_links"] = merged_links
+            updated_fields.append("jd_links")
         else:
-            skipped_fields.append("notes")
+            skipped_fields.append("jd_links")
+    # --- internal_form_link ---
+    if record.internal_form_link is not None:
+        if family.internal_form_link != record.internal_form_link:
+            updates["internal_form_link"] = record.internal_form_link
+            updated_fields.append("internal_form_link")
+        else:
+            skipped_fields.append("internal_form_link")
+    # --- duration ---
+    if record.duration is not None:
+        if family.duration != record.duration:
+            updates["duration"] = record.duration
+            updated_fields.append("duration")
+        else:
+            skipped_fields.append("duration")
+    # --- start_date ---
+    if record.start_date is not None:
+        if family.start_date != record.start_date:
+            updates["start_date"] = record.start_date
+            updated_fields.append("start_date")
+        else:
+            skipped_fields.append("start_date")
+    # --- location ---
+    if record.location is not None:
+        if family.location != record.location:
+            updates["location"] = record.location
+            updated_fields.append("location")
+        else:
+            skipped_fields.append("location")
+    # --- eligible ---
+    if record.eligible is not None:
+        if family.eligible != record.eligible:
+            updates["eligible"] = record.eligible
+            updated_fields.append("eligible")
+        else:
+            skipped_fields.append("eligible")
+    # --- eligible_reason ---
+    if record.eligible_reason is not None:
+        if family.eligible_reason != record.eligible_reason:
+            updates["eligible_reason"] = record.eligible_reason
+            updated_fields.append("eligible_reason")
+        else:
+            skipped_fields.append("eligible_reason")
+                
+# --- notes ---
+    # if record.notes:
+    #     existing_notes = family.notes or []
+    #     new_notes = [n for n in record.notes if n not in existing_notes]
+    #     if new_notes:
+    #         updates["notes"] = existing_notes + new_notes
+    #         updated_fields.append("notes")
+    #     else:
+    #         skipped_fields.append("notes")
 
     # --- confidence ---
     if record.confidence is not None:

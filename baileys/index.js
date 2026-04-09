@@ -180,13 +180,25 @@ async function connectToWhatsApp(reconnectDelay = INITIAL_RECONNECT_DELAY_MS) {
 
   logger.info({ version }, 'Baileys version');
 
+  // const sock = makeWASocket({
+  //   version,
+  //   auth: state,
+  //   logger: pino({ level: 'silent' }), // suppress internal Baileys logs
+  //   printQRInTerminal: false,           // we handle QR ourselves
+  //   browser: ['Placement Bot', 'Chrome', '1.0.0'],
+  //   syncFullHistory: false,
+  // });
+
   const sock = makeWASocket({
     version,
     auth: state,
-    logger: pino({ level: 'silent' }), // suppress internal Baileys logs
-    printQRInTerminal: false,           // we handle QR ourselves
+    logger: pino({ level: 'silent' }),
+    printQRInTerminal: false,
     browser: ['Placement Bot', 'Chrome', '1.0.0'],
     syncFullHistory: false,
+    shouldSyncHistoryMessage: () => false,
+    getMessage: async () => undefined,
+    cachedGroupMetadata: async () => undefined,
   });
 
   // ── QR code ──────────────────────────────────────────────────────────────────
@@ -203,30 +215,46 @@ async function connectToWhatsApp(reconnectDelay = INITIAL_RECONNECT_DELAY_MS) {
       logger.info('WhatsApp connection established');
       reconnectDelay = INITIAL_RECONNECT_DELAY_MS; // reset backoff on success
 
+      // // ── TEMPORARY — list all groups to find TARGET_GROUP_JID ─────────────
+      // try {
+      //   const groups = await sock.groupFetchAllParticipating();
+      //   Object.entries(groups).forEach(([jid, group]) => {
+      //     logger.info({ jid, name: group.subject }, 'Group found');
+      //   });
+      // } catch (err) {
+      //   logger.warn({ error: err.message }, 'Could not fetch group list');
+      // }
+      // // ── END TEMPORARY ─────────────────────────────────────────────────────
+
+      // ── Backfill last 50 messages from target group ─────────────────────── // reset backoff on success
+
       // ── Backfill last 50 messages from target group ───────────────────────
-      if (TARGET_GROUP_JID && TARGET_GROUP_JID !== '120363XXXXXXXXXX@g.us') {
-        try {
-          logger.info(
-            { group: TARGET_GROUP_JID, count: BACKFILL_COUNT },
-            'Starting backfill'
-          );
-          const history = await sock.fetchMessageHistory(
-            BACKFILL_COUNT,
-            TARGET_GROUP_JID,
-            undefined
-          );
-          if (history && history.length > 0) {
-            logger.info({ count: history.length }, 'Backfill messages received');
-            for (const msg of history) {
-              await handleMessage(msg);
-            }
-          } else {
-            logger.info('No backfill messages returned');
-          }
-        } catch (err) {
-          logger.warn({ error: err.message }, 'Backfill failed — continuing without it');
-        }
-      }
+      // if (TARGET_GROUP_JID && TARGET_GROUP_JID !== '120363XXXXXXXXXX@g.us') {
+      //   try {
+      //     logger.info(
+      //       { group: TARGET_GROUP_JID, count: BACKFILL_COUNT },
+      //       'Starting backfill'
+      //     );
+      //     const history = await sock.fetchMessageHistory(
+      //       BACKFILL_COUNT,
+      //       TARGET_GROUP_JID,
+      //       undefined
+      //     );
+      //     if (history && history.length > 0) {
+      //       logger.info({ count: history.length }, 'Backfill messages received');
+      //       for (const msg of history) {
+      //         await handleMessage(msg);
+      //       }
+      //     } else {
+      //       logger.info('No backfill messages returned');
+      //     }
+      //   } catch (err) {
+      //     logger.warn({ error: err.message }, 'Backfill failed — continuing without it');
+      //   }
+      // }
+
+      // ── Backfill disabled — live messages only ────────────────────────────
+      logger.info('Backfill disabled — listening for live messages only');
     }
 
     if (connection === 'close') {

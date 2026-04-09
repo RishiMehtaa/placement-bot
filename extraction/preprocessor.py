@@ -26,6 +26,7 @@ PLACEMENT_KEYWORDS = [
     "apply",
     "deadline",
     "intern",
+    "internship",
     "role",
     "package",
     "lpa",
@@ -36,6 +37,11 @@ PLACEMENT_KEYWORDS = [
     "opportunity",
     "placement",
     "recruit",
+    "extended",
+    "stipend",
+    "link",
+    "before",
+
 ]
 
 # ---------------------------------------------------------------------------

@@ -123,6 +123,14 @@ async def create_family(db: AsyncSession, data: dict) -> Family:
         jd_link=data.get("jd_link"),
         notes=data.get("notes", []),
         confidence=data.get("confidence"),
+        roles=data.get("roles", []),
+        duration=data.get("duration"),
+        jd_links=data.get("jd_links", []),
+        internal_form_link=data.get("internal_form_link"),
+        start_date=data.get("start_date"),
+        location=data.get("location"),
+        eligible=data.get("eligible"),
+        eligible_reason=data.get("eligible_reason"),
     )
     db.add(family)
     await db.commit()
@@ -178,6 +186,21 @@ async def update_family(
     if updates.get("jd_link") and not family.jd_link:
         family.jd_link = updates["jd_link"]
 
+    # roles: update if new value is non-empty and current is empty
+    if updates.get("roles") and not family.roles:
+        family.roles = updates["roles"]
+
+    # New scalar fields: update if new value is non-null and current is empty
+    for field_name in ("duration", "internal_form_link", "start_date", "location", "eligible", "eligible_reason"):
+        new_val = updates.get(field_name)
+        if new_val and not getattr(family, field_name, None):
+            setattr(family, field_name, new_val)
+
+    # jd_links: merge and deduplicate
+    new_jd_links = updates.get("jd_links")
+    if new_jd_links:
+        existing_links = family.jd_links or []
+        family.jd_links = list(dict.fromkeys(existing_links + new_jd_links))
     # Notes: always append, never replace
     new_notes = updates.get("notes", [])
     if new_notes:
@@ -504,3 +527,19 @@ async def update_family_sheets_row(
     if family:
         family.sheets_row_id = sheets_row_id
         await db.commit()
+
+async def get_family_by_message_id(
+    db: AsyncSession,
+    message_id: str,
+) -> Optional[Family]:
+    """
+    Return the family associated with a given message_id.
+    Used for reply-based family resolution.
+    """
+    result = await db.execute(
+        select(Family)
+        .join(MessageFamilyMap, MessageFamilyMap.family_id == Family.id)
+        .where(MessageFamilyMap.message_id == message_id)
+        .limit(1)
+    )
+    return result.scalar_one_or_none()

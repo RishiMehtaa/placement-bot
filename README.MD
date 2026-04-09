@@ -124,7 +124,7 @@ Once deployed to AWS, the system requires zero human action:
 | Phase | Description | Status |
 |---|---|---|
 | 0 | Environment setup + Docker baseline | ✅ Complete |
-| 1 | Baileys WhatsApp listener | ⏳ On Hold |
+| 1 | Baileys WhatsApp listener | ✅ Complete |
 | 2–5 | FastAPI receiver + Database + Queue | ✅ Complete |
 | 6–10 | Extraction pipeline (regex + context + LLM) | ✅ Complete |
 | 11–13 | Family grouping + Merge + Deduplication | ✅ Complete |

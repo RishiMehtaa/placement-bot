@@ -34,13 +34,30 @@ logger = get_logger(__name__)
 SCOPES = ["https://www.googleapis.com/auth/spreadsheets"]
 
 # Sheet column order — must match HEADER_ROW below
+# HEADER_ROW = [
+#     "Family ID",
+#     "Company",
+#     "Role",
+#     "Deadline",
+#     "Package",
+#     "JD Link",
+#     "Confidence",
+#     "Last Updated",
+# ]
+
 HEADER_ROW = [
     "Family ID",
     "Company",
-    "Role",
-    "Deadline",
-    "Package",
-    "JD Link",
+    "Role/s",
+    "Duration",
+    "JD Link/s",
+    "Internal Form Link",
+    "Start Date",
+    "Location",
+    "Stipend/Package",
+    "Application Deadline",
+    "Eligible",
+    "Eligible Reason",
     "Confidence",
     "Last Updated",
 ]
@@ -65,37 +82,89 @@ def _build_sheets_client():
     return client
 
 
-def _family_to_row(family) -> list:
-    """
-    Convert a Family ORM object to a list of cell values matching HEADER_ROW order.
-    """
-    deadline_str = ""
-    if family.deadline:
-        try:
-            deadline_str = family.deadline.strftime("%Y-%m-%d %H:%M UTC")
-        except Exception:
-            deadline_str = str(family.deadline)
+# def _family_to_row(family) -> list:
+#     """
+#     Convert a Family ORM object to a list of cell values matching HEADER_ROW order.
+#     """
+#     deadline_str = ""
+#     if family.deadline:
+#         try:
+#             deadline_str = family.deadline.strftime("%Y-%m-%d %H:%M UTC")
+#         except Exception:
+#             deadline_str = str(family.deadline)
 
-    notes_str = ""
-    if family.notes:
-        notes_str = " | ".join(family.notes)
+#     notes_str = ""
+#     if family.notes:
+#         notes_str = " | ".join(family.notes)
 
-    confidence_str = ""
-    if family.confidence is not None:
-        confidence_str = f"{family.confidence:.2f}"
+#     confidence_str = ""
+#     if family.confidence is not None:
+#         confidence_str = f"{family.confidence:.2f}"
 
-    last_updated_str = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M UTC")
+#     last_updated_str = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M UTC")
 
-    return [
-        str(family.id),
-        family.company or "",
-        family.role or "",
-        deadline_str,
-        family.package or "",
-        family.jd_link or "",
-        confidence_str,
-        last_updated_str,
-    ]
+#     return [
+#         str(family.id),
+#         family.company or "",
+#         family.role or "",
+#         deadline_str,
+#         family.package or "",
+#         family.jd_link or "",
+#         confidence_str,
+#         last_updated_str,
+#     ]
+
+# def _family_to_row(family) -> list:
+#     """Convert a Family ORM object to a Sheets row matching HEADER_ROW."""
+#     return [
+#         str(family.id),
+#         family.company or "",
+#         ", ".join(family.roles) if family.roles else "",
+#         family.duration or "",
+#         ", ".join(family.jd_links) if family.jd_links else (family.jd_link or ""),
+#         family.internal_form_link or "",
+#         family.start_date or "",
+#         family.location or "",
+#         family.package or "",
+#         family.deadline.strftime("%Y-%m-%d %H:%M UTC")
+#             if family.deadline
+#             else "",
+#         family.eligible or "",
+#         family.eligible_reason or "",
+#         str(round(family.confidence, 2)) if family.confidence else "0.0",
+#         datetime.utcnow().strftime("%d %b %Y %H:%M UTC"),
+#     ]
+
+def _family_to_rows(family) -> list[list]:
+    """Convert a Family ORM object to one or more Sheets rows."""
+
+    roles = family.roles or [family.role] or [""]
+
+    rows = []
+
+    for i, role in enumerate(roles):
+        rows.append([
+            str(family.id),
+            family.company or "",
+            role or "",
+            family.duration or "",
+            family.jd_links[i]
+                if family.jd_links and i < len(family.jd_links)
+                else (family.jd_link or ""),
+            family.internal_form_link or "",
+            family.start_date or "",
+            family.location or "",
+            family.package or "",
+            family.deadline.strftime("%d %b %Y %H:%M")
+            if family.deadline
+            else "",
+            family.eligible or "",
+            family.eligible_reason or "",
+            str(round(family.confidence, 2)) if family.confidence else "0.0",
+            datetime.utcnow().strftime("%d %b %Y %H:%M"),
+        ])
+
+    return rows
 
 
 async def _ensure_header_row(client, spreadsheet_id: str) -> None:
@@ -193,7 +262,7 @@ async def sync_to_sheets(family_id: str) -> bool:
             sync_record = await get_sheets_sync_record(db, family_id)
             existing_row_id = sync_record.sheets_row_id if sync_record else None
 
-            row_data = _family_to_row(family)
+            row_data = _family_to_rows(family)
 
         client = _build_sheets_client()
         spreadsheet_id = settings.GOOGLE_SHEET_ID
@@ -205,7 +274,10 @@ async def sync_to_sheets(family_id: str) -> bool:
         # Try to find the row by family_id in column A (source of truth)
         if existing_row_id:
             try:
-                target_row = int(existing_row_id)
+                # target_row = int(existing_row_id)
+                parts = str(existing_row_id).split(":")
+                target_row = int(parts[0])
+                row_count = int(parts[1]) if len(parts) > 1 else 1
             except (ValueError, TypeError):
                 target_row = None
 
@@ -213,16 +285,30 @@ async def sync_to_sheets(family_id: str) -> bool:
             # Scan sheet to find if family already has a row (defensive check)
             target_row = await _find_row_by_family_id(client, spreadsheet_id, family_id)
 
+        # if target_row is not None:
+        #     # UPDATE existing row in place
+        #     range_name = _row_range(target_row)
+        #     client.spreadsheets().values().update(
+        #         spreadsheetId=spreadsheet_id,
+        #         range=range_name,
+        #         valueInputOption="RAW",
+        #         body={"values": row_data},
+        #     ).execute()
+        #     sheets_row_id = str(target_row)
+        #     action = "updated"
         if target_row is not None:
-            # UPDATE existing row in place
-            range_name = _row_range(target_row)
+            # UPDATE existing row(s) in place
+            last_row = target_row + len(row_data) - 1
+            range_name = f"Sheet1!A{target_row}:{_col_letter(len(HEADER_ROW))}{last_row}"
+
             client.spreadsheets().values().update(
                 spreadsheetId=spreadsheet_id,
                 range=range_name,
                 valueInputOption="RAW",
-                body={"values": [row_data]},
+                body={"values": row_data},
             ).execute()
-            sheets_row_id = str(target_row)
+
+            sheets_row_id = f"{target_row}:{len(row_data)}"
             action = "updated"
         else:
             # APPEND new row
@@ -234,13 +320,16 @@ async def sync_to_sheets(family_id: str) -> bool:
                     range=f"Sheet1!A{DATA_START_ROW}",
                     valueInputOption="RAW",
                     insertDataOption="INSERT_ROWS",
-                    body={"values": [row_data]},
+                    body={"values": row_data},
                 )
                 .execute()
             )
             # Parse the updated range to get the actual row number
             updated_range = result.get("updates", {}).get("updatedRange", "")
-            sheets_row_id = _parse_row_from_range(updated_range)
+            start_row = int(_parse_row_from_range(updated_range))
+            row_count = len(row_data)
+            sheets_row_id = f"{start_row}:{row_count}"
+            # sheets_row_id = _parse_row_from_range(updated_range)
             action = "appended"
 
         # Persist sync state back to DB

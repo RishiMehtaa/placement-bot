@@ -338,38 +338,76 @@ async def run_pipeline(message_id: str) -> None:
         )
 
         logger.info(
-            "Pipeline | message=%s | Stage 3 complete | company=%s role=%s confidence=%.2f source=%s",
+            "Pipeline | message=%s | Stage 3 complete | company=%s role=%s confidence=%.2f",
             message_id,
             context_fields.company,
             context_fields.role,
             context_fields.confidence,
-            context_fields.context_source,
         )
 
 # ------------------------------------------------------------------ #
         # Stage 4 — LLM Extractor (only when company or role still unknown)
         # ------------------------------------------------------------------ #
-        if context_fields.company is None or context_fields.role is None:
-            llm_fields = extract_with_llm(preprocessed, context_fields)
-            logger.info(
-                "Pipeline | message=%s | Stage 4 complete | company=%s role=%s confidence=%.2f",
-                message_id,
-                llm_fields.company,
-                llm_fields.role,
-                llm_fields.confidence,
-            )
-        else:
-            llm_fields = LLMExtractedFields(
-                company=None,
-                role=None,
-                confidence=0.0,
-                reasoning=None,
-                source="skipped",
-            )
-            logger.info(
-                "Pipeline | message=%s | Stage 4 skipped (company+role resolved by Stage 3)",
-                message_id,
-            )        # ------------------------------------------------------------------ #
+        # should_use_llm = (
+        #     context_fields.company is None
+        #     or context_fields.role is None
+        #     or context_fields.context_source != "self"
+        # )
+
+        # if should_use_llm:
+        # # if context_fields.company is None or context_fields.role is None:
+        #     llm_fields = extract_with_llm(preprocessed, context_fields)
+        #     logger.info(
+        #         "Pipeline | message=%s | Stage 4 complete | company=%s role=%s confidence=%.2f",
+        #         message_id,
+        #         llm_fields.company,
+        #         llm_fields.role,
+        #         llm_fields.confidence,
+        #     )
+        # else:
+        #     llm_fields = LLMExtractedFields(
+        #         company=None,
+        #         role=None,
+        #         confidence=0.0,
+        #         reasoning=None,
+        #         source="skipped",
+        #     )
+        #     logger.info(
+        #         "Pipeline | message=%s | Stage 4 skipped (company+role resolved by Stage 3)",
+        #         message_id,
+        #     )        
+        # # ------------------------------------------------------------------ #
+        # # Stage 5 — Normalizer
+        # # ------------------------------------------------------------------ #
+        # record = normalize(
+        #     preprocessed=preprocessed,
+        #     regex_fields=regex_fields,
+        #     context_fields=context_fields,
+        #     llm_fields=llm_fields,
+        # )
+
+        # logger.info(
+        #     "Pipeline | message=%s | Stage 5 complete | company=%s role=%s deadline=%s package=%s confidence=%.2f",
+        #     message_id,
+        #     record.company,
+        #     record.role,
+        #     record.deadline,
+        #     record.package,
+        #     record.confidence,
+        # )
+
+        llm_fields = extract_with_llm(preprocessed, context_fields)
+
+        logger.info(
+            "Pipeline | message=%s | Stage 4 complete | company=%s role=%s confidence=%.2f",
+            message_id,
+            llm_fields.company,
+            llm_fields.roles,
+            llm_fields.confidence,
+            # llm_fields.source,
+        )
+
+        # ------------------------------------------------------------------ #
         # Stage 5 — Normalizer
         # ------------------------------------------------------------------ #
         record = normalize(
@@ -380,19 +418,19 @@ async def run_pipeline(message_id: str) -> None:
         )
 
         logger.info(
-            "Pipeline | message=%s | Stage 5 complete | company=%s role=%s deadline=%s package=%s confidence=%.2f",
+            "Pipeline | message=%s | Stage 5 complete | company=%s role=%s deadline=%s package=%s location=%s confidence=%.2f",
             message_id,
             record.company,
             record.role,
             record.deadline,
             record.package,
+            record.location,
             record.confidence,
         )
-
         # ------------------------------------------------------------------ #
         # Stage 6 — Family Resolver
         # ------------------------------------------------------------------ #
-        resolution = await resolve_family(record=record, db=db)
+        resolution = await resolve_family(record=record, db=db, current_message=message)
 
         logger.info(
             "Pipeline | message=%s | Stage 6 complete | family=%s is_new=%s contribution=%s matched_on=%s",
@@ -416,12 +454,19 @@ async def run_pipeline(message_id: str) -> None:
         )
 
         # --- map message → family ---
-        await map_message_to_family(
-            db,
-            message_id=message_id,
-            family_id=str(resolution.family_id),
-            contribution_role=resolution.contribution_role,
-        )
+        # --- map message → family ---
+        if resolution.family_id is not None:
+            await map_message_to_family(
+                db,
+                message_id=message_id,
+                family_id=str(resolution.family_id),
+                contribution_role=resolution.contribution_role,
+            )
+        else:
+            logger.warning(
+                "Pipeline | message=%s | Stage 7 skipping map — family_id is None (unmapped message)",
+                message_id,
+            )
         logger.info(
             "Pipeline | message=%s | Stage 7 stub — merge engine not yet built",
             message_id,

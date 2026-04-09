@@ -32,6 +32,7 @@ class FamilyResolutionResult:
 async def resolve_family(
     record: NormalizedRecord,
     db: AsyncSession,
+    current_message,
 ) -> FamilyResolutionResult:
     """
     Main entry point for Stage 6.
@@ -51,6 +52,32 @@ async def resolve_family(
     message_id = record.message_id
     company = record.company
     role = record.role
+
+    # ------------------------------------------------------------------ #
+    # Case 0: reply-based grouping (HIGHEST PRIORITY)
+    # ------------------------------------------------------------------ #
+    if current_message.reply_to_id:
+        parent_family = await queries.get_family_by_message_id(
+            db, current_message.reply_to_id
+        )
+
+        if parent_family:
+            logger.info(
+                "Stage 6 | message=%s | attached via reply to family=%s",
+                message_id,
+                parent_family.id,
+            )
+            await queries.map_message_to_family(
+                db, message_id, parent_family.id, contribution_role="context"
+            )
+            return FamilyResolutionResult(
+                family_id=parent_family.id,
+                company=parent_family.company,
+                role=parent_family.role,
+                is_new_family=False,
+                contribution_role="context",
+                matched_on="reply",
+            )
 
     # ------------------------------------------------------------------ #
     # Case 1: company + role both known — strongest match signal
@@ -81,12 +108,19 @@ async def resolve_family(
                 db,
                 {
                     "company": company,
-                    "role": role,
-                    "deadline": record.deadline,
-                    "package": record.package,
-                    "jd_link": record.jd_link,
-                    "notes": list(record.notes) if record.notes else [],
-                    "confidence": record.confidence,
+        "role": role,
+        "roles": record.roles,
+        "deadline": record.deadline,
+        "package": record.package,
+        "jd_link": record.jd_link,
+        "jd_links": record.jd_links,
+        "internal_form_link": record.internal_form_link,
+        "duration": record.duration,
+        "start_date": record.start_date,
+        "location": record.location,
+        "eligible": record.eligible,
+        "eligible_reason": record.eligible_reason,
+        "confidence": record.confidence,
                 },
             )
         await queries.map_message_to_family(
@@ -135,12 +169,19 @@ async def resolve_family(
             db,
             {
                 "company": company,
-                "role": None,
-                "deadline": record.deadline,
-                "package": record.package,
-                "jd_link": record.jd_link,
-                "notes": list(record.notes) if record.notes else [],
-                "confidence": record.confidence,
+        "role": role,
+        "roles": record.roles,
+        "deadline": record.deadline,
+        "package": record.package,
+        "jd_link": record.jd_link,
+        "jd_links": record.jd_links,
+        "internal_form_link": record.internal_form_link,
+        "duration": record.duration,
+        "start_date": record.start_date,
+        "location": record.location,
+        "eligible": record.eligible,
+        "eligible_reason": record.eligible_reason,
+        "confidence": record.confidence,
             },
         )
         await queries.map_message_to_family(
@@ -160,35 +201,83 @@ async def resolve_family(
             matched_on="company_only",
         )
 
-    # ------------------------------------------------------------------ #
-    # Case 3: company unknown — cannot anchor a family
-    # Attach to the most recent family as context if one exists,
-    # otherwise mark as unmapped.
-    # ------------------------------------------------------------------ #
-    recent = await queries.get_most_recent_family(db)
+    # # ------------------------------------------------------------------ #
+    # # Case 3: company unknown — cannot anchor a family
+    # # Attach to the most recent family as context if one exists,
+    # # otherwise mark as unmapped.
+    # # ------------------------------------------------------------------ #
+    # recent = await queries.get_most_recent_family(db)
 
-    if recent:
-        logger.info(
-            "Stage 6 | message=%s | no company — attaching to most recent family=%s as context",
-            message_id,
-            recent.id,
-        )
-        await queries.map_message_to_family(
-            db, message_id, recent.id, contribution_role="context"
-        )
-        return FamilyResolutionResult(
-            family_id=recent.id,
-            company=recent.company,
-            role=recent.role,
-            is_new_family=False,
-            contribution_role="context",
-            matched_on="none",
-        )
+    # if recent:
+    #     logger.info(
+    #         "Stage 6 | message=%s | no company — attaching to most recent family=%s as context",
+    #         message_id,
+    #         recent.id,
+    #     )
+    #     await queries.map_message_to_family(
+    #         db, message_id, recent.id, contribution_role="context"
+    #     )
+    #     return FamilyResolutionResult(
+    #         family_id=recent.id,
+    #         company=recent.company,
+    #         role=recent.role,
+    #         is_new_family=False,
+    #         contribution_role="context",
+    #         matched_on="none",
+    #     )
 
+    # logger.warning(
+    #     "Stage 6 | message=%s | no company and no existing families — unmapped",
+    #     message_id,
+    # )
+    # return FamilyResolutionResult(
+    #     family_id=None,
+    #     company=None,
+    #     role=None,
+    #     is_new_family=False,
+    #     contribution_role="unmapped",
+    #     matched_on="none",
+    # )
+    
+    # ------------------------------------------------------------------ #
+    # Case 3: weak message (no company, no role)
+    # ------------------------------------------------------------------ #
+
+    # Only attach if message has useful data
+    has_signal = any([
+        record.deadline,
+        record.package,
+        record.jd_link,
+        # record.notes
+    ])
+
+    if has_signal:
+        recent = await queries.get_most_recent_family(db)
+
+        if recent:
+            logger.info(
+                "Stage 6 | message=%s | weak signal — attaching to recent family=%s",
+                message_id,
+                recent.id,
+            )
+            await queries.map_message_to_family(
+                db, message_id, recent.id, contribution_role="context"
+            )
+            return FamilyResolutionResult(
+                family_id=recent.id,
+                company=recent.company,
+                role=recent.role,
+                is_new_family=False,
+                contribution_role="context",
+                matched_on="recent_family",
+            )
+
+    # fallback
     logger.warning(
-        "Stage 6 | message=%s | no company and no existing families — unmapped",
+        "Stage 6 | message=%s | weak message but no suitable family — unmapped",
         message_id,
     )
+
     return FamilyResolutionResult(
         family_id=None,
         company=None,
