@@ -380,3 +380,30 @@ async def _sqs_stats() -> dict:
     except Exception as e:
         logger.error(f"[SQS Queue] Stats failed: {e}")
         return {}
+
+
+async def _pg_reset_stale_processing(db, older_than_minutes: int = 10):
+    from datetime import timedelta
+    from sqlalchemy import text
+    cutoff = datetime.now(timezone.utc) - timedelta(minutes=older_than_minutes)
+    result = await db.execute(
+        text("""
+            UPDATE queue_items SET status = 'pending', last_error = 'Reset from stale'
+            WHERE status = 'processing' AND started_at < :cutoff
+            RETURNING message_id
+        """),
+        {"cutoff": cutoff}
+    )
+    await db.commit()
+    rows = result.fetchall()
+    if rows:
+        logger.warning(f"Reset {len(rows)} stale processing items to pending")
+
+async def reset_stale_processing(db, older_than_minutes: int = 10):
+    await _pg_reset_stale_processing(db, older_than_minutes)
+
+enqueue = _pg_enqueue
+
+# Backward-compat aliases — main.py imports these names
+enqueue = _pg_enqueue
+reset_stale_processing = _pg_reset_stale_processing
