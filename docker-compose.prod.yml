@@ -18,12 +18,13 @@ services:
       - ./logs:/app/logs
       - ./config:/app/config
     healthcheck:
-      test: ["CMD", "pg_isready", "-h", "RDS_ENDPOINT_PLACEHOLDER", "-p", "5432", "-U", "placement_user"]
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health","pg_isready", "-h", "RDS_ENDPOINT_PLACEHOLDER", "-p", "5432", "-U", "placement_user"]
       interval: 10s
       timeout: 5s
       retries: 5
     networks:
       - placement_net
+    restart: always
 
   baileys:
     build:
@@ -35,9 +36,11 @@ services:
     volumes:
       - ./baileys/sessions:/app/sessions
     depends_on:
-      - fastapi
+      fastapi:
+        condition: service_healthy
     networks:
       - placement_net
+    restart: always
 
 networks:
   placement_net:
