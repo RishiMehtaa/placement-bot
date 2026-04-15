@@ -449,21 +449,22 @@ async def get_opportunities(
 ):
     async with get_db_context() as db:
         base_query = """
-            SELECT
-                f.id,
-                f.company,
-                f.role,
-                f.deadline,
-                f.package,
-                f.jd_link,
-                f.confidence,
-                f.created_at,
-                f.updated_at,
-                f.notes,
-                ss.sync_status
-            FROM families f
-            LEFT JOIN sheets_sync ss ON ss.family_id = f.id
-        """
+                SELECT
+                    f.id,
+                    f.company,
+                    f.role,
+                    f.roles,
+                    f.deadline,
+                    f.package,
+                    f.jd_link,
+                    f.confidence,
+                    f.created_at,
+                    f.updated_at,
+                    f.notes,
+                    ss.sync_status
+                FROM families f
+                LEFT JOIN sheets_sync ss ON ss.family_id = f.id
+            """
         conditions = []
         params = {}
 
@@ -493,25 +494,47 @@ async def get_opportunities(
 
         opportunities = []
         for row in rows:
-            opportunities.append({
-                "id": str(row.id),
-                "company": row.company,
-                "role": row.role,
-                "deadline": row.deadline.isoformat() if row.deadline else None,
-                "package": row.package,
-                "jd_link": row.jd_link,
-                "confidence": row.confidence,
-                "created_at": row.created_at.isoformat() if row.created_at else None,
-                "updated_at": row.updated_at.isoformat() if row.updated_at else None,
-                "sync_status": row.sync_status,
-            })
+            # opportunities.append({
+            #     "id": str(row.id),
+            #     "company": row.company,
+            #     "role": row.role,
+            #     "deadline": row.deadline.isoformat() if row.deadline else None,
+            #     "package": row.package,
+            #     "jd_link": row.jd_link,
+            #     "confidence": row.confidence,
+            #     "created_at": row.created_at.isoformat() if row.created_at else None,
+            #     "updated_at": row.updated_at.isoformat() if row.updated_at else None,
+            #     "sync_status": row.sync_status,
+            # })
+            roles = row.roles if row.roles else ([row.role] if row.role else [])
+            for role in roles:
+                opportunities.append({
+                    "id": str(row.id),
+                    "company": row.company,
+                    "role": role,
+                    "deadline": row.deadline.isoformat() if row.deadline else None,
+                    "package": row.package,
+                    "jd_link": row.jd_link,
+                    "confidence": row.confidence,
+                    "created_at": row.created_at.isoformat() if row.created_at else None,
+                    "updated_at": row.updated_at.isoformat() if row.updated_at else None,
+                    "sync_status": row.sync_status,
+                })
 
+        # return {
+        #     "opportunities": opportunities,
+        #     "total": total,
+        #     "page": page,
+        #     "page_size": page_size,
+        #     "total_pages": (total + page_size - 1) // page_size,
+        # }
+        expanded_total = len(opportunities)
         return {
             "opportunities": opportunities,
-            "total": total,
+            "total": expanded_total,
             "page": page,
             "page_size": page_size,
-            "total_pages": (total + page_size - 1) // page_size,
+            "total_pages": (expanded_total + page_size - 1) // page_size,
         }
 
 @app.get("/opportunities/{family_id}")
