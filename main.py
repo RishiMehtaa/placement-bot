@@ -231,6 +231,10 @@ from worker.processor import process_single_message, process_pending_messages
 from scraper.receiver import MessagePayload, TEST_MESSAGES
 from utils.logger import get_logger
 from config.settings import settings
+from fastapi import Query
+from sqlalchemy import text
+from db.database import get_db_context
+
 
 logger = get_logger(__name__)
 
@@ -284,6 +288,16 @@ app = FastAPI(
     title="WhatsApp Placement Intelligence System",
     version="0.14.0",
     lifespan=lifespan,
+)
+
+from fastapi.middleware.cors import CORSMiddleware
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=settings.CORS_ORIGINS.split(","),
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
 )
 
 
@@ -421,4 +435,192 @@ async def queue_process(background_tasks: BackgroundTasks):
     return {
         "status": "triggered",
         "message": "Processing pending messages in background",
+    }
+
+
+
+
+@app.get("/opportunities")
+async def get_opportunities(
+    page: int = Query(1, ge=1),
+    page_size: int = Query(20, ge=1, le=100),
+    search: str = Query(None),
+    eligible: str = Query(None),
+):
+    async with get_db_context() as db:
+        base_query = """
+            SELECT
+                f.id,
+                f.company,
+                f.role,
+                f.deadline,
+                f.package,
+                f.jd_link,
+                f.confidence,
+                f.created_at,
+                f.updated_at,
+                f.notes,
+                ss.sync_status
+            FROM families f
+            LEFT JOIN sheets_sync ss ON ss.family_id = f.id
+        """
+        conditions = []
+        params = {}
+
+        if search:
+            conditions.append("(LOWER(f.company) LIKE :search OR LOWER(f.role) LIKE :search)")
+            params["search"] = f"%{search.lower()}%"
+
+        if eligible:
+            conditions.append("f.notes::text LIKE :eligible_filter")
+            params["eligible_filter"] = f"%\"eligible\": \"{eligible}\"%"
+
+        if conditions:
+            base_query += " WHERE " + " AND ".join(conditions)
+
+        base_query += " ORDER BY f.created_at DESC"
+
+        count_query = f"SELECT COUNT(*) FROM ({base_query}) AS sub"
+        count_result = await db.execute(text(count_query), params)
+        total = count_result.scalar()
+
+        base_query += " LIMIT :limit OFFSET :offset"
+        params["limit"] = page_size
+        params["offset"] = (page - 1) * page_size
+
+        result = await db.execute(text(base_query), params)
+        rows = result.fetchall()
+
+        opportunities = []
+        for row in rows:
+            opportunities.append({
+                "id": str(row.id),
+                "company": row.company,
+                "role": row.role,
+                "deadline": row.deadline.isoformat() if row.deadline else None,
+                "package": row.package,
+                "jd_link": row.jd_link,
+                "confidence": row.confidence,
+                "created_at": row.created_at.isoformat() if row.created_at else None,
+                "updated_at": row.updated_at.isoformat() if row.updated_at else None,
+                "sync_status": row.sync_status,
+            })
+
+        return {
+            "opportunities": opportunities,
+            "total": total,
+            "page": page,
+            "page_size": page_size,
+            "total_pages": (total + page_size - 1) // page_size,
+        }
+
+@app.get("/opportunities/{family_id}")
+async def get_opportunity(family_id: str):
+    async with get_db_context() as db:
+        result = await db.execute(
+            text("""
+                SELECT f.*, ss.sync_status, ss.last_synced_at
+                FROM families f
+                LEFT JOIN sheets_sync ss ON ss.family_id = f.id
+                WHERE f.id = :id
+            """),
+            {"id": family_id},
+        )
+        row = result.fetchone()
+        if not row:
+            from fastapi import HTTPException
+            raise HTTPException(status_code=404, detail="Opportunity not found")
+
+        messages_result = await db.execute(
+            text("""
+                SELECT m.message_id, m.text, m.timestamp, m.sender, mfm.contribution_role
+                FROM message_family_map mfm
+                JOIN messages m ON m.message_id = mfm.message_id
+                WHERE mfm.family_id = :id
+                ORDER BY m.timestamp ASC
+            """),
+            {"id": family_id},
+        )
+        msgs = messages_result.fetchall()
+
+        return {
+            "id": str(row.id),
+            "company": row.company,
+            "role": row.role,
+            "deadline": row.deadline.isoformat() if row.deadline else None,
+            "package": row.package,
+            "jd_link": row.jd_link,
+            "notes": row.notes,
+            "confidence": row.confidence,
+            "created_at": row.created_at.isoformat() if row.created_at else None,
+            "updated_at": row.updated_at.isoformat() if row.updated_at else None,
+            "sync_status": row.sync_status,
+            "last_synced_at": row.last_synced_at.isoformat() if row.last_synced_at else None,
+            "messages": [
+                {
+                    "message_id": m.message_id,
+                    "text": m.text,
+                    "timestamp": m.timestamp.isoformat() if m.timestamp else None,
+                    "sender": m.sender,
+                    "contribution_role": m.contribution_role,
+                }
+                for m in msgs
+            ],
+        }
+
+@app.get("/analytics/summary")
+async def analytics_summary():
+    async with get_db_context() as db:
+        total = (await db.execute(text("SELECT COUNT(*) FROM families"))).scalar()
+        today = (await db.execute(text("SELECT COUNT(*) FROM families WHERE DATE(created_at) = CURRENT_DATE"))).scalar()
+        this_week = (await db.execute(text("SELECT COUNT(*) FROM families WHERE deadline BETWEEN NOW() AND NOW() + INTERVAL '7 days'"))).scalar()
+        top_companies = (await db.execute(text("""
+            SELECT company, COUNT(*) as count
+            FROM families
+            WHERE company IS NOT NULL
+            GROUP BY company
+            ORDER BY count DESC
+            LIMIT 5
+        """))).fetchall()
+
+        return {
+            "total_opportunities": total,
+            "new_today": today,
+            "deadlines_this_week": this_week,
+            "top_companies": [{"company": r.company, "count": r.count} for r in top_companies],
+        }
+
+@app.get("/analytics/timeline")
+async def analytics_timeline():
+    async with get_db_context() as db:
+        result = await db.execute(text("""
+            SELECT DATE(created_at) as date, COUNT(*) as count
+            FROM families
+            GROUP BY DATE(created_at)
+            ORDER BY date ASC
+            LIMIT 30
+        """))
+        rows = result.fetchall()
+        return {
+            "timeline": [
+                {"date": str(r.date), "count": r.count}
+                for r in rows
+            ]
+        }
+
+@app.get("/demo/qr")
+async def demo_qr():
+    return {
+        "connected": True,
+        "qr_image_url": "/static/demo_qr.png",
+    }
+
+@app.get("/demo/groups")
+async def demo_groups():
+    return {
+        "groups": [
+            {"id": "120363406687081890@g.us", "name": "DJ Sanghvi Placements 2027"},
+            {"id": "demo-group-2", "name": "CE Internships"},
+            {"id": "demo-group-3", "name": "Placement Updates"},
+        ]
     }
