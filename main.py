@@ -594,13 +594,13 @@ async def get_opportunity(family_id: str):
 @app.get("/analytics/summary")
 async def analytics_summary():
     async with get_db_context() as db:
-        total = (await db.execute(text("SELECT COUNT(*) + COALESCE(SUM(CARDINALITY(roles)), 0) FROM families"))).scalar()
-        today = (await db.execute(text("SELECT COUNT(*) + COALESCE(SUM(CARDINALITY(roles)), 0) FROM families WHERE DATE(created_at) = CURRENT_DATE"))).scalar()
-        this_week = (await db.execute(text("SELECT COUNT(*) + COALESCE(SUM(CARDINALITY(roles)), 0) FROM families WHERE deadline BETWEEN NOW() AND NOW() + INTERVAL '7 days'"))).scalar()
+        total = (await db.execute(text("SELECT COALESCE(SUM(CARDINALITY(roles)), 0) FROM families"))).scalar()
+        today = (await db.execute(text("SELECT COALESCE(SUM(CARDINALITY(roles)), 0) FROM families WHERE DATE(created_at) = CURRENT_DATE"))).scalar()
+        this_week = (await db.execute(text("SELECT COALESCE(SUM(CARDINALITY(roles)), 0) FROM families WHERE deadline BETWEEN NOW() AND NOW() + INTERVAL '7 days'"))).scalar()
         top_companies = (await db.execute(text("""
             SELECT
                 company,
-                COUNT(*) + COALESCE(SUM(CARDINALITY(roles)), 0) AS count
+                COALESCE(SUM(CARDINALITY(roles)), 0) AS count
             FROM families
             WHERE company IS NOT NULL
             GROUP BY company
@@ -617,7 +617,7 @@ async def analytics_summary():
             "new_today": today,
             "deadlines_this_week": this_week,
     
-            "top_companies": [{"company": r.company, "count": r.count-1} for r in top_companies],
+            "top_companies": [{"company": r.company, "count": r.count} for r in top_companies],
         }
 
 @app.get("/analytics/timeline")
