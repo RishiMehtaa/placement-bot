@@ -129,28 +129,136 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
                   ),
                   const SizedBox(height: 24),
 
-                  // Search bar
-                  TextField(
-                    controller: _searchController,
-                    style: const TextStyle(color: AppTheme.textPrimary),
-                    decoration: InputDecoration(
-                      hintText: 'Search by company or role...',
-                      prefixIcon: const Icon(Icons.search, color: AppTheme.textSecondary, size: 20),
-                      suffixIcon: _searchController.text.isNotEmpty
-                          ? IconButton(
-                              icon: const Icon(Icons.clear, color: AppTheme.textSecondary, size: 18),
-                              onPressed: () {
-                                _searchController.clear();
-                                ref.read(searchQueryProvider.notifier).state = '';
-                                ref.read(currentPageProvider.notifier).state = 1;
-                              },
-                            )
-                          : null,
+                  // Search bar with sort
+                  Row(
+                    children: [
+                      Expanded(
+                        child: TextField(
+                          controller: _searchController,
+                          style: const TextStyle(color: AppTheme.textPrimary),
+                          decoration: InputDecoration(
+                            hintText: 'Search by company or role...',
+                            prefixIcon: const Icon(Icons.search, color: AppTheme.textSecondary, size: 20),
+                            suffixIcon: _searchController.text.isNotEmpty
+                                ? IconButton(
+                                    icon: const Icon(Icons.clear, color: AppTheme.textSecondary, size: 18),
+                                    onPressed: () {
+                                      _searchController.clear();
+                                      ref.read(searchQueryProvider.notifier).state = '';
+                                      ref.read(currentPageProvider.notifier).state = 1;
+                                    },
+                                  )
+                                : null,
+                          ),
+                          onChanged: (val) {
+                            ref.read(searchQueryProvider.notifier).state = val;
+                            ref.read(currentPageProvider.notifier).state = 1;
+                          },
+                        ),
+                      ),
+                      const SizedBox(width: 12),
+                      // Sort dropdown
+                      Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 12),
+                        decoration: BoxDecoration(
+                          borderRadius: BorderRadius.circular(8),
+                          border: Border.all(color: AppTheme.border),
+                        ),
+                        child: DropdownButton<String>(
+                          value: ref.watch(sortByProvider),
+                          items: const [
+                            DropdownMenuItem(value: 'deadline', child: Text('Deadline')),
+                            DropdownMenuItem(value: 'package', child: Text('Package')),
+                            DropdownMenuItem(value: 'created_at', child: Text('Newest')),
+                            DropdownMenuItem(value: 'confidence', child: Text('Confidence')),
+                          ],
+                          onChanged: (value) {
+                            if (value != null) {
+                              ref.read(sortByProvider.notifier).state = value;
+                              ref.read(currentPageProvider.notifier).state = 1;
+                            }
+                          },
+                          underline: const SizedBox(),
+                          isDense: true,
+                          style: const TextStyle(color: AppTheme.textPrimary, fontSize: 13),
+                          dropdownColor: AppTheme.surface,
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 16),
+
+                  // Filter chips
+                  SingleChildScrollView(
+                    scrollDirection: Axis.horizontal,
+                    child: Row(
+                      children: [
+                        // Package range filter
+                        PopupMenuButton<String?>(
+                          initialValue: ref.watch(packageFilterProvider),
+                          itemBuilder: (context) => [
+                            const PopupMenuItem(value: null, child: Text('All Packages')),
+                            const PopupMenuItem(value: 'below_3', child: Text('< 3 LPA')),
+                            const PopupMenuItem(value: '3_to_6', child: Text('3-6 LPA')),
+                            const PopupMenuItem(value: '6_to_10', child: Text('6-10 LPA')),
+                            const PopupMenuItem(value: 'above_10', child: Text('10+ LPA')),
+                          ],
+                          onSelected: (value) {
+                            ref.read(packageFilterProvider.notifier).state = value;
+                            ref.read(currentPageProvider.notifier).state = 1;
+                          },
+                          child: Chip(
+                            label: Text(
+                              ref.watch(packageFilterProvider) != null
+                                  ? 'Package: ${_formatPackageFilter(ref.watch(packageFilterProvider))}'
+                                  : 'Package',
+                              style: const TextStyle(fontSize: 12),
+                            ),
+                            onDeleted: ref.watch(packageFilterProvider) != null
+                                ? () {
+                                    ref.read(packageFilterProvider.notifier).state = null;
+                                    ref.read(currentPageProvider.notifier).state = 1;
+                                  }
+                                : null,
+                            backgroundColor: ref.watch(packageFilterProvider) != null
+                                ? AppTheme.primary.withOpacity(0.2)
+                                : AppTheme.surface,
+                          ),
+                        ),
+                        const SizedBox(width: 8),
+                        // Deadline status filter
+                        PopupMenuButton<String?>(
+                          initialValue: ref.watch(deadlineStatusFilterProvider),
+                          itemBuilder: (context) => [
+                            const PopupMenuItem(value: null, child: Text('All Deadlines')),
+                            const PopupMenuItem(value: 'overdue', child: Text('Overdue')),
+                            const PopupMenuItem(value: 'due_soon', child: Text('Due Soon (≤7 days)')),
+                            const PopupMenuItem(value: 'open', child: Text('Open (>7 days)')),
+                          ],
+                          onSelected: (value) {
+                            ref.read(deadlineStatusFilterProvider.notifier).state = value;
+                            ref.read(currentPageProvider.notifier).state = 1;
+                          },
+                          child: Chip(
+                            label: Text(
+                              ref.watch(deadlineStatusFilterProvider) != null
+                                  ? 'Deadline: ${_formatDeadlineFilter(ref.watch(deadlineStatusFilterProvider))}'
+                                  : 'Deadline',
+                              style: const TextStyle(fontSize: 12),
+                            ),
+                            onDeleted: ref.watch(deadlineStatusFilterProvider) != null
+                                ? () {
+                                    ref.read(deadlineStatusFilterProvider.notifier).state = null;
+                                    ref.read(currentPageProvider.notifier).state = 1;
+                                  }
+                                : null,
+                            backgroundColor: ref.watch(deadlineStatusFilterProvider) != null
+                                ? AppTheme.accent.withOpacity(0.2)
+                                : AppTheme.surface,
+                          ),
+                        ),
+                      ],
                     ),
-                    onChanged: (val) {
-                      ref.read(searchQueryProvider.notifier).state = val;
-                      ref.read(currentPageProvider.notifier).state = 1;
-                    },
                   ),
                   const SizedBox(height: 20),
 
@@ -179,7 +287,7 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
                                 ),
                                 const SizedBox(height: 16),
                                 const Text(
-                                  'No opportunities yet',
+                                  'No opportunities found',
                                   style: TextStyle(color: AppTheme.textSecondary),
                                 ),
                               ],
@@ -300,5 +408,33 @@ class _ErrorBanner extends StatelessWidget {
         ],
       ),
     );
+  }
+}
+
+String _formatPackageFilter(String? filter) {
+  switch (filter) {
+    case 'below_3':
+      return '< 3 LPA';
+    case '3_to_6':
+      return '3-6 LPA';
+    case '6_to_10':
+      return '6-10 LPA';
+    case 'above_10':
+      return '10+ LPA';
+    default:
+      return '';
+  }
+}
+
+String _formatDeadlineFilter(String? filter) {
+  switch (filter) {
+    case 'overdue':
+      return 'Overdue';
+    case 'due_soon':
+      return 'Due Soon';
+    case 'open':
+      return 'Open';
+    default:
+      return '';
   }
 }

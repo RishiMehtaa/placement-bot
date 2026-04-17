@@ -571,7 +571,7 @@ async def get_opportunity(family_id: str):
 
         messages_result = await db.execute(
             text("""
-                SELECT m.message_id, m.text, m.timestamp, m.sender, mfm.contribution_role
+                SELECT DISTINCT m.message_id, m.text, m.timestamp, m.sender, mfm.contribution_role
                 FROM message_family_map mfm
                 JOIN messages m ON m.message_id = mfm.message_id
                 WHERE mfm.family_id = :id
@@ -671,6 +671,9 @@ async def analytics_summary():
                 SELECT
                     CASE
                         WHEN location IS NULL OR btrim(location) = '' THEN 'Unknown'
+                        WHEN lower(btrim(location)) ~ '(remote|wfh|work from home|work-from-home|fully remote|distributed)' THEN 'Remote'
+                        WHEN lower(btrim(location)) ~ '(hybrid|flexible|on-site flexible)' THEN 'Hybrid'
+                        WHEN btrim(location) ~ ',' THEN 'Multiple Locations'
                         ELSE INITCAP(REGEXP_REPLACE(BTRIM(location), '\\s+', ' ', 'g'))
                     END AS label,
                     {role_weight} AS weight
@@ -678,7 +681,7 @@ async def analytics_summary():
             ) AS location_buckets
             GROUP BY label
             ORDER BY count DESC
-            LIMIT 8
+            LIMIT 10
         """))).fetchall()
 
         package_bands = (await db.execute(text(f"""
@@ -687,12 +690,15 @@ async def analytics_summary():
                 SELECT
                     CASE
                         WHEN package IS NULL OR btrim(package) = '' THEN 'Unknown'
-                        WHEN lower(package) ~ '(stipend|not disclosed|n/a|na)' THEN 'Unspecified'
-                        WHEN (regexp_match(lower(package), '([0-9]+(?:\\.[0-9]+)?)')) IS NULL THEN 'Other'
-                        WHEN ((regexp_match(lower(package), '([0-9]+(?:\\.[0-9]+)?)'))[1])::numeric < 3 THEN '< 3 LPA'
-                        WHEN ((regexp_match(lower(package), '([0-9]+(?:\\.[0-9]+)?)'))[1])::numeric < 6 THEN '3-6 LPA'
-                        WHEN ((regexp_match(lower(package), '([0-9]+(?:\\.[0-9]+)?)'))[1])::numeric < 10 THEN '6-10 LPA'
-                        ELSE '10+ LPA'
+                        WHEN lower(btrim(package)) ~ '(stipend|not disclosed|n/a|na|tbd|–|-unknown|to be decided)' THEN 'Unspecified'
+                        WHEN NOT lower(btrim(package)) ~ '[0-9]' THEN 'Other'
+                        ELSE
+                            CASE
+                                WHEN (regexp_match(lower(btrim(package)), '[₹\$£€]?\\s*([0-9]+(?:\\.[0-9]+)?)'))[1]::numeric < 3 THEN '< 3 LPA'
+                                WHEN (regexp_match(lower(btrim(package)), '[₹\$£€]?\\s*([0-9]+(?:\\.[0-9]+)?)'))[1]::numeric < 6 THEN '3-6 LPA'
+                                WHEN (regexp_match(lower(btrim(package)), '[₹\$£€]?\\s*([0-9]+(?:\\.[0-9]+)?)'))[1]::numeric < 10 THEN '6-10 LPA'
+                                ELSE '10+ LPA'
+                            END
                     END AS label,
                     {role_weight} AS weight
                 FROM families
