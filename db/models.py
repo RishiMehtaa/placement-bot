@@ -5,7 +5,7 @@ from datetime import datetime, timezone
 
 from sqlalchemy import (
     Boolean, Column, DateTime, Float, ForeignKey,
-    Integer, String, Text, UUID, ARRAY
+    Integer, String, Text, UUID, ARRAY, UniqueConstraint
 )
 from sqlalchemy.dialects.postgresql import JSONB, UUID as PG_UUID
 from sqlalchemy.orm import relationship
@@ -115,6 +115,41 @@ class Family(Base):
         back_populates="family",
         cascade="all, delete-orphan",
     )
+    applied_roles = relationship(
+        "FamilyRoleApplied",
+        back_populates="family",
+        cascade="all, delete-orphan",
+    )
+
+
+class FamilyRoleApplied(Base):
+    __tablename__ = "family_role_applied"
+    __table_args__ = (
+        UniqueConstraint("family_id", "role_text", name="uq_family_role_applied"),
+    )
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    family_id = Column(
+        PG_UUID(as_uuid=True),
+        ForeignKey("families.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    role_text = Column(Text, nullable=False)
+    applied = Column(Boolean, nullable=False, default=False)
+    created_at = Column(
+        DateTime(timezone=True),
+        default=lambda: datetime.now(timezone.utc),
+        nullable=False,
+    )
+    updated_at = Column(
+        DateTime(timezone=True),
+        default=lambda: datetime.now(timezone.utc),
+        onupdate=lambda: datetime.now(timezone.utc),
+        nullable=True,
+    )
+
+    family = relationship("Family", back_populates="applied_roles")
 
 
 # ── Table 3: message_family_map ───────────────────────────────────────────────

@@ -234,9 +234,19 @@ from config.settings import settings
 from fastapi import Query
 from sqlalchemy import text
 from db.database import get_db_context
+from pydantic import BaseModel
 
 
 logger = get_logger(__name__)
+
+
+def _normalize_role_text(role: str) -> str:
+    return " ".join((role or "").strip().lower().split())
+
+
+class AppliedStatusUpdate(BaseModel):
+    role: str
+    applied: bool
 
 
 async def scheduler_loop():
@@ -507,6 +517,17 @@ async def get_opportunities(
         result = await db.execute(text(base_query), params)
         rows = result.fetchall()
 
+        applied_rows_result = await db.execute(text("""
+            SELECT family_id::text AS family_id, role_text
+            FROM family_role_applied
+            WHERE applied = TRUE
+        """))
+        applied_rows = applied_rows_result.fetchall()
+        applied_map = {
+            (r.family_id, _normalize_role_text(r.role_text))
+            for r in applied_rows
+        }
+
         opportunities = []
         for row in rows:
             # opportunities.append({
@@ -523,10 +544,11 @@ async def get_opportunities(
             # })
             roles = row.roles if row.roles else ([row.role] if row.role else [])
             for role in roles:
+                role_text = role or ""
                 opportunities.append({
                     "id": str(row.id),
                     "company": row.company,
-                    "role": role,
+                    "role": role_text,
                     "deadline": row.deadline.isoformat() if row.deadline else None,
                     "package": row.package,
                     "jd_link": row.jd_link,
@@ -534,6 +556,7 @@ async def get_opportunities(
                     "created_at": row.created_at.isoformat() if row.created_at else None,
                     "updated_at": row.updated_at.isoformat() if row.updated_at else None,
                     "sync_status": row.sync_status,
+                    "applied": (str(row.id), _normalize_role_text(role_text)) in applied_map,
                 })
 
         # return {
@@ -612,6 +635,56 @@ async def get_opportunity(family_id: str):
             ],
         }
 
+
+@app.patch("/opportunities/{family_id}/applied")
+async def set_opportunity_applied_status(
+    family_id: str,
+    payload: AppliedStatusUpdate,
+):
+    async with get_db_context() as db:
+        family_result = await db.execute(
+            text("""
+                SELECT role, roles
+                FROM families
+                WHERE id = :id
+            """),
+            {"id": family_id},
+        )
+        family_row = family_result.fetchone()
+        if not family_row:
+            raise HTTPException(status_code=404, detail="Opportunity not found")
+
+        candidate_roles = family_row.roles if family_row.roles else ([family_row.role] if family_row.role else [])
+        role_lookup = {
+            _normalize_role_text(str(role)): str(role)
+            for role in candidate_roles
+            if role is not None
+        }
+        normalized_payload_role = _normalize_role_text(payload.role)
+        matched_role = role_lookup.get(normalized_payload_role)
+        if matched_role is None:
+            raise HTTPException(status_code=400, detail="Role does not belong to this opportunity")
+
+        await db.execute(
+            text("""
+                INSERT INTO family_role_applied (family_id, role_text, applied, created_at, updated_at)
+                VALUES (CAST(:family_id AS uuid), :role_text, :applied, NOW(), NOW())
+                ON CONFLICT (family_id, role_text)
+                DO UPDATE SET applied = EXCLUDED.applied, updated_at = NOW()
+            """),
+            {
+                "family_id": family_id,
+                "role_text": matched_role,
+                "applied": payload.applied,
+            },
+        )
+
+        return {
+            "id": family_id,
+            "role": matched_role,
+            "applied": payload.applied,
+        }
+
 @app.get("/analytics/summary")
 async def analytics_summary():
     async with get_db_context() as db:
@@ -629,6 +702,22 @@ async def analytics_summary():
             GROUP BY company
             ORDER BY count DESC
             LIMIT 5
+        """))).fetchall()
+
+        applied_count = (await db.execute(text("""
+            SELECT COALESCE(COUNT(*), 0) AS count
+            FROM family_role_applied
+            WHERE applied = TRUE
+        """))).scalar()
+
+        applied_companies = (await db.execute(text("""
+            SELECT f.company AS company, COUNT(*) AS count
+            FROM family_role_applied fra
+            JOIN families f ON f.id = fra.family_id
+            WHERE fra.applied = TRUE AND f.company IS NOT NULL
+            GROUP BY f.company
+            ORDER BY count DESC
+            LIMIT 8
         """))).fetchall()
 
         deadline_health = (await db.execute(text(f"""
@@ -715,10 +804,12 @@ async def analytics_summary():
             "total_opportunities": total,
             "new_today": today,
             "deadlines_this_week": this_week,
+            "applied_count": applied_count,
             "deadline_health": [{"label": r.label, "count": r.count} for r in deadline_health],
             "eligibility_breakdown": [{"label": r.label, "count": r.count} for r in eligibility_breakdown],
             "location_distribution": [{"label": r.label, "count": r.count} for r in location_distribution],
             "package_bands": [{"label": r.label, "count": r.count} for r in package_bands],
+            "applied_companies": [{"company": r.company, "count": r.count} for r in applied_companies],
             "top_companies": [{"company": r.company, "count": r.count} for r in top_companies],
         }
 
