@@ -633,7 +633,7 @@ async def analytics_timeline():
         rows = result.fetchall()
         return {
             "timeline": [
-                {"date": str(r.date), "count": r.count}
+                {"date": str(r.date), "count": r.count - 1}
                 for r in rows
             ]
         }
