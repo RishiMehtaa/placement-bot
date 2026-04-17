@@ -82,58 +82,6 @@ def _build_sheets_client():
     return client
 
 
-# def _family_to_row(family) -> list:
-#     """
-#     Convert a Family ORM object to a list of cell values matching HEADER_ROW order.
-#     """
-#     deadline_str = ""
-#     if family.deadline:
-#         try:
-#             deadline_str = family.deadline.strftime("%Y-%m-%d %H:%M UTC")
-#         except Exception:
-#             deadline_str = str(family.deadline)
-
-#     notes_str = ""
-#     if family.notes:
-#         notes_str = " | ".join(family.notes)
-
-#     confidence_str = ""
-#     if family.confidence is not None:
-#         confidence_str = f"{family.confidence:.2f}"
-
-#     last_updated_str = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M UTC")
-
-#     return [
-#         str(family.id),
-#         family.company or "",
-#         family.role or "",
-#         deadline_str,
-#         family.package or "",
-#         family.jd_link or "",
-#         confidence_str,
-#         last_updated_str,
-#     ]
-
-# def _family_to_row(family) -> list:
-#     """Convert a Family ORM object to a Sheets row matching HEADER_ROW."""
-#     return [
-#         str(family.id),
-#         family.company or "",
-#         ", ".join(family.roles) if family.roles else "",
-#         family.duration or "",
-#         ", ".join(family.jd_links) if family.jd_links else (family.jd_link or ""),
-#         family.internal_form_link or "",
-#         family.start_date or "",
-#         family.location or "",
-#         family.package or "",
-#         family.deadline.strftime("%Y-%m-%d %H:%M UTC")
-#             if family.deadline
-#             else "",
-#         family.eligible or "",
-#         family.eligible_reason or "",
-#         str(round(family.confidence, 2)) if family.confidence else "0.0",
-#         datetime.utcnow().strftime("%d %b %Y %H:%M UTC"),
-#     ]
 
 def _family_to_rows(family) -> list[list]:
     """Convert a Family ORM object to one or more Sheets rows."""

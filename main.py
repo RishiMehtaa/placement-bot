@@ -598,19 +598,24 @@ async def analytics_summary():
         today = (await db.execute(text("SELECT COUNT(*) FROM families WHERE DATE(created_at) = CURRENT_DATE"))).scalar()
         this_week = (await db.execute(text("SELECT COUNT(*) FROM families WHERE deadline BETWEEN NOW() AND NOW() + INTERVAL '7 days'"))).scalar()
         top_companies = (await db.execute(text("""
-            SELECT company, COUNT(*) as count
+            SELECT company,roles, COUNT(*) as count
             FROM families
             WHERE company IS NOT NULL
             GROUP BY company
             ORDER BY count DESC
             LIMIT 5
         """))).fetchall()
+        # final_companes = []
+        # for r in top_companies:
+        #     for role in r.roles if r.roles else ([r.role] if r.role else []):
+        #         final_companes.append({"company": r.company, "count": r.count})
 
         return {
             "total_opportunities": total,
             "new_today": today,
             "deadlines_this_week": this_week,
-            "top_companies": [{"company": r.company, "count": r.count} for r in top_companies],
+    
+            "top_companies": [{"company": r.company, "count": r.count * len(r.roles if r.roles else [r.role] if r.role else [])} for r in top_companies],
         }
 
 @app.get("/analytics/timeline")
