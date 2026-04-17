@@ -113,6 +113,50 @@ class AnalyticsScreen extends ConsumerWidget {
                 ),
                 const SizedBox(height: 32),
 
+                if (data.deadlineHealth.isNotEmpty) ...[
+                  _SectionHeader(title: 'Deadline Health'),
+                  const SizedBox(height: 16),
+                  _BucketStatGrid(
+                    buckets: data.deadlineHealth,
+                    isDesktop: isDesktop,
+                    icon: Icons.timer_outlined,
+                    color: AppTheme.warning,
+                  ),
+                  const SizedBox(height: 32),
+                ],
+
+                if (data.eligibilityBreakdown.isNotEmpty) ...[
+                  _SectionHeader(title: 'Eligibility Breakdown'),
+                  const SizedBox(height: 16),
+                  _BucketStatGrid(
+                    buckets: data.eligibilityBreakdown,
+                    isDesktop: isDesktop,
+                    icon: Icons.verified_user_outlined,
+                    color: AppTheme.accent,
+                  ),
+                  const SizedBox(height: 32),
+                ],
+
+                if (data.locationDistribution.isNotEmpty) ...[
+                  _SectionHeader(title: 'Location Distribution'),
+                  const SizedBox(height: 16),
+                  _BucketBarChart(
+                    buckets: data.locationDistribution,
+                    barColor: AppTheme.primary,
+                  ),
+                  const SizedBox(height: 32),
+                ],
+
+                if (data.packageBands.isNotEmpty) ...[
+                  _SectionHeader(title: 'Package Bands'),
+                  const SizedBox(height: 16),
+                  _BucketBarChart(
+                    buckets: data.packageBands,
+                    barColor: AppTheme.accent,
+                  ),
+                  const SizedBox(height: 32),
+                ],
+
                 // Top companies bar chart
                 if (data.topCompanies.isNotEmpty) ...[
                   _SectionHeader(title: 'Top Hiring Companies'),
@@ -130,7 +174,12 @@ class AnalyticsScreen extends ConsumerWidget {
                 ],
 
                 // Empty state
-                if (data.topCompanies.isEmpty && data.timeline.isEmpty)
+                if (data.deadlineHealth.isEmpty &&
+                    data.eligibilityBreakdown.isEmpty &&
+                    data.locationDistribution.isEmpty &&
+                    data.packageBands.isEmpty &&
+                    data.topCompanies.isEmpty &&
+                    data.timeline.isEmpty)
                   Center(
                     child: Column(
                       children: [
@@ -425,6 +474,169 @@ class _TimelineChart extends StatelessWidget {
               ),
             ),
           ],
+        ),
+      ),
+    );
+  }
+}
+
+class _BucketStatGrid extends StatelessWidget {
+  final List<AnalyticsBucket> buckets;
+  final bool isDesktop;
+  final IconData icon;
+  final Color color;
+
+  const _BucketStatGrid({
+    required this.buckets,
+    required this.isDesktop,
+    required this.icon,
+    required this.color,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return GridView.count(
+      crossAxisCount: isDesktop ? 3 : 2,
+      crossAxisSpacing: 12,
+      mainAxisSpacing: 12,
+      shrinkWrap: true,
+      physics: const NeverScrollableScrollPhysics(),
+      childAspectRatio: isDesktop ? 2.2 : 1.55,
+      children: buckets
+          .map(
+            (bucket) => StatCard(
+              label: bucket.label,
+              value: bucket.count.toString(),
+              icon: icon,
+              color: color,
+            ),
+          )
+          .toList(),
+    );
+  }
+}
+
+class _BucketBarChart extends StatelessWidget {
+  final List<AnalyticsBucket> buckets;
+  final Color barColor;
+
+  const _BucketBarChart({
+    required this.buckets,
+    required this.barColor,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final maxCount = buckets.map((bucket) => bucket.count).reduce((a, b) => a > b ? a : b);
+
+    return Container(
+      height: 260,
+      padding: const EdgeInsets.fromLTRB(8, 20, 24, 12),
+      decoration: BoxDecoration(
+        color: AppTheme.surface,
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: AppTheme.border),
+      ),
+      child: BarChart(
+        BarChartData(
+          alignment: BarChartAlignment.spaceAround,
+          maxY: (maxCount + 1).toDouble(),
+          barTouchData: BarTouchData(
+            touchTooltipData: BarTouchTooltipData(
+              getTooltipColor: (_) => AppTheme.surfaceVariant,
+              getTooltipItem: (group, groupIndex, rod, rodIndex) {
+                return BarTooltipItem(
+                  '${buckets[groupIndex].label}\n',
+                  const TextStyle(
+                    color: AppTheme.textPrimary,
+                    fontWeight: FontWeight.w600,
+                    fontSize: 12,
+                  ),
+                  children: [
+                    TextSpan(
+                      text: '${rod.toY.toInt()} role${rod.toY > 1 ? 's' : ''}',
+                      style: TextStyle(
+                        color: barColor,
+                        fontWeight: FontWeight.w500,
+                        fontSize: 12,
+                      ),
+                    ),
+                  ],
+                );
+              },
+            ),
+          ),
+          titlesData: FlTitlesData(
+            show: true,
+            topTitles: const AxisTitles(sideTitles: SideTitles(showTitles: false)),
+            rightTitles: const AxisTitles(sideTitles: SideTitles(showTitles: false)),
+            leftTitles: AxisTitles(
+              sideTitles: SideTitles(
+                showTitles: true,
+                reservedSize: 28,
+                interval: 1,
+                getTitlesWidget: (value, meta) {
+                  if (value == value.floorToDouble() && value > 0) {
+                    return Text(
+                      value.toInt().toString(),
+                      style: const TextStyle(
+                        color: AppTheme.textSecondary,
+                        fontSize: 11,
+                      ),
+                    );
+                  }
+                  return const SizedBox.shrink();
+                },
+              ),
+            ),
+            bottomTitles: AxisTitles(
+              sideTitles: SideTitles(
+                showTitles: true,
+                reservedSize: 38,
+                getTitlesWidget: (value, meta) {
+                  final index = value.toInt();
+                  if (index < 0 || index >= buckets.length) {
+                    return const SizedBox.shrink();
+                  }
+                  final label = buckets[index].label;
+                  final short = label.length > 12 ? '${label.substring(0, 12)}…' : label;
+                  return Padding(
+                    padding: const EdgeInsets.only(top: 6),
+                    child: Text(
+                      short,
+                      style: const TextStyle(
+                        color: AppTheme.textSecondary,
+                        fontSize: 10,
+                      ),
+                      textAlign: TextAlign.center,
+                    ),
+                  );
+                },
+              ),
+            ),
+          ),
+          gridData: FlGridData(
+            show: true,
+            drawVerticalLine: false,
+            getDrawingHorizontalLine: (_) => FlLine(
+              color: AppTheme.border,
+              strokeWidth: 1,
+            ),
+          ),
+          borderData: FlBorderData(show: false),
+          barGroups: buckets.asMap().entries.map((entry) {
+            return BarChartGroupData(
+              x: entry.key,
+              barRods: [
+                BarChartRodData(
+                  toY: entry.value.count.toDouble(),
+                  color: barColor,
+                  width: 28,
+                  borderRadius: const BorderRadius.vertical(top: Radius.circular(6)),
+                ),
+              ],
+            );
+          }).toList(),
         ),
       ),
     );

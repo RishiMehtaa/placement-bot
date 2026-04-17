@@ -10,6 +10,18 @@ final analyticsDataProvider = FutureProvider.autoDispose<AnalyticsData>((ref) as
     totalOpportunities: summary.totalOpportunities,
     newToday: summary.newToday,
     deadlinesThisWeek: summary.deadlinesThisWeek,
+    deadlineHealth: summary.deadlineHealth
+      .map((e) => AnalyticsBucket.fromJson(e))
+      .toList(),
+    eligibilityBreakdown: summary.eligibilityBreakdown
+      .map((e) => AnalyticsBucket.fromJson(e))
+      .toList(),
+    locationDistribution: summary.locationDistribution
+      .map((e) => AnalyticsBucket.fromJson(e))
+      .toList(),
+    packageBands: summary.packageBands
+      .map((e) => AnalyticsBucket.fromJson(e))
+      .toList(),
     topCompanies: summary.topCompanies
         .map((e) => TopCompany.fromJson(e))
         .toList(),

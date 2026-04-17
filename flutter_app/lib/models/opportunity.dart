@@ -92,12 +92,20 @@ class AnalyticsSummary {
   final int totalOpportunities;
   final int newToday;
   final int deadlinesThisWeek;
+  final List<Map<String, dynamic>> deadlineHealth;
+  final List<Map<String, dynamic>> eligibilityBreakdown;
+  final List<Map<String, dynamic>> locationDistribution;
+  final List<Map<String, dynamic>> packageBands;
   final List<Map<String, dynamic>> topCompanies;
 
   const AnalyticsSummary({
     required this.totalOpportunities,
     required this.newToday,
     required this.deadlinesThisWeek,
+    required this.deadlineHealth,
+    required this.eligibilityBreakdown,
+    required this.locationDistribution,
+    required this.packageBands,
     required this.topCompanies,
   });
 
@@ -106,6 +114,22 @@ class AnalyticsSummary {
       totalOpportunities: json['total_opportunities'] as int,
       newToday: json['new_today'] as int,
       deadlinesThisWeek: json['deadlines_this_week'] as int,
+      deadlineHealth: (json['deadline_health'] as List?)
+              ?.map((e) => e as Map<String, dynamic>)
+              .toList() ??
+          [],
+      eligibilityBreakdown: (json['eligibility_breakdown'] as List?)
+              ?.map((e) => e as Map<String, dynamic>)
+              .toList() ??
+          [],
+      locationDistribution: (json['location_distribution'] as List?)
+              ?.map((e) => e as Map<String, dynamic>)
+              .toList() ??
+          [],
+      packageBands: (json['package_bands'] as List?)
+              ?.map((e) => e as Map<String, dynamic>)
+              .toList() ??
+          [],
       topCompanies: (json['top_companies'] as List)
           .map((e) => e as Map<String, dynamic>)
           .toList(),

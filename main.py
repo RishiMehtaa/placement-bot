@@ -615,18 +615,90 @@ async def get_opportunity(family_id: str):
 @app.get("/analytics/summary")
 async def analytics_summary():
     async with get_db_context() as db:
-        total = (await db.execute(text("SELECT COALESCE(SUM(CARDINALITY(roles)), 0) FROM families"))).scalar()
-        today = (await db.execute(text("SELECT COALESCE(SUM(CARDINALITY(roles)), 0) FROM families WHERE DATE(created_at) = CURRENT_DATE"))).scalar()
-        this_week = (await db.execute(text("SELECT COALESCE(SUM(CARDINALITY(roles)), 0) FROM families WHERE deadline BETWEEN NOW() AND NOW() + INTERVAL '7 days'"))).scalar()
-        top_companies = (await db.execute(text("""
+        role_weight = "CASE WHEN CARDINALITY(roles) > 0 THEN CARDINALITY(roles) ELSE CASE WHEN role IS NOT NULL THEN 1 ELSE 0 END END"
+
+        total = (await db.execute(text(f"SELECT COALESCE(SUM({role_weight}), 0) FROM families"))).scalar()
+        today = (await db.execute(text(f"SELECT COALESCE(SUM({role_weight}), 0) FROM families WHERE DATE(created_at) = CURRENT_DATE"))).scalar()
+        this_week = (await db.execute(text(f"SELECT COALESCE(SUM({role_weight}), 0) FROM families WHERE deadline BETWEEN NOW() AND NOW() + INTERVAL '7 days'"))).scalar()
+        top_companies = (await db.execute(text(f"""
             SELECT
                 company,
-                COALESCE(SUM(CARDINALITY(roles)), 0) AS count
+                COALESCE(SUM({role_weight}), 0) AS count
             FROM families
             WHERE company IS NOT NULL
             GROUP BY company
             ORDER BY count DESC
             LIMIT 5
+        """))).fetchall()
+
+        deadline_health = (await db.execute(text(f"""
+            SELECT 'Overdue' AS label, COALESCE(SUM(CASE WHEN deadline < NOW() THEN {role_weight} ELSE 0 END), 0) AS count
+            FROM families
+            UNION ALL
+            SELECT 'Due in 0-3 days' AS label, COALESCE(SUM(CASE WHEN deadline >= NOW() AND deadline < NOW() + INTERVAL '3 days' THEN {role_weight} ELSE 0 END), 0) AS count
+            FROM families
+            UNION ALL
+            SELECT 'Due in 3-7 days' AS label, COALESCE(SUM(CASE WHEN deadline >= NOW() + INTERVAL '3 days' AND deadline < NOW() + INTERVAL '7 days' THEN {role_weight} ELSE 0 END), 0) AS count
+            FROM families
+            UNION ALL
+            SELECT 'Due after 7 days' AS label, COALESCE(SUM(CASE WHEN deadline >= NOW() + INTERVAL '7 days' THEN {role_weight} ELSE 0 END), 0) AS count
+            FROM families
+            UNION ALL
+            SELECT 'No deadline' AS label, COALESCE(SUM(CASE WHEN deadline IS NULL THEN {role_weight} ELSE 0 END), 0) AS count
+            FROM families
+        """))).fetchall()
+
+        eligibility_breakdown = (await db.execute(text(f"""
+            SELECT label, COALESCE(SUM(weight), 0) AS count
+            FROM (
+                SELECT
+                    CASE
+                        WHEN eligible IS NULL OR btrim(eligible) = '' THEN 'Unknown'
+                        WHEN lower(eligible) IN ('yes', 'y', 'true', 'eligible') OR lower(eligible) LIKE 'yes%%' THEN 'Eligible'
+                        WHEN lower(eligible) IN ('no', 'n', 'false', 'not eligible', 'ineligible') OR lower(eligible) LIKE 'no%%' THEN 'Not Eligible'
+                        ELSE 'Other'
+                    END AS label,
+                    {role_weight} AS weight
+                FROM families
+            ) AS eligible_buckets
+            GROUP BY label
+            ORDER BY count DESC
+        """))).fetchall()
+
+        location_distribution = (await db.execute(text(f"""
+            SELECT label, COALESCE(SUM(weight), 0) AS count
+            FROM (
+                SELECT
+                    CASE
+                        WHEN location IS NULL OR btrim(location) = '' THEN 'Unknown'
+                        ELSE INITCAP(REGEXP_REPLACE(BTRIM(location), '\\s+', ' ', 'g'))
+                    END AS label,
+                    {role_weight} AS weight
+                FROM families
+            ) AS location_buckets
+            GROUP BY label
+            ORDER BY count DESC
+            LIMIT 8
+        """))).fetchall()
+
+        package_bands = (await db.execute(text(f"""
+            SELECT label, COALESCE(SUM(weight), 0) AS count
+            FROM (
+                SELECT
+                    CASE
+                        WHEN package IS NULL OR btrim(package) = '' THEN 'Unknown'
+                        WHEN lower(package) ~ '(stipend|not disclosed|n/a|na)' THEN 'Unspecified'
+                        WHEN (regexp_match(lower(package), '([0-9]+(?:\\.[0-9]+)?)')) IS NULL THEN 'Other'
+                        WHEN ((regexp_match(lower(package), '([0-9]+(?:\\.[0-9]+)?)'))[1])::numeric < 3 THEN '< 3 LPA'
+                        WHEN ((regexp_match(lower(package), '([0-9]+(?:\\.[0-9]+)?)'))[1])::numeric < 6 THEN '3-6 LPA'
+                        WHEN ((regexp_match(lower(package), '([0-9]+(?:\\.[0-9]+)?)'))[1])::numeric < 10 THEN '6-10 LPA'
+                        ELSE '10+ LPA'
+                    END AS label,
+                    {role_weight} AS weight
+                FROM families
+            ) AS package_buckets
+            GROUP BY label
+            ORDER BY count DESC
         """))).fetchall()
         # final_companes = []
         # for r in top_companies:
@@ -637,7 +709,10 @@ async def analytics_summary():
             "total_opportunities": total,
             "new_today": today,
             "deadlines_this_week": this_week,
-    
+            "deadline_health": [{"label": r.label, "count": r.count} for r in deadline_health],
+            "eligibility_breakdown": [{"label": r.label, "count": r.count} for r in eligibility_breakdown],
+            "location_distribution": [{"label": r.label, "count": r.count} for r in location_distribution],
+            "package_bands": [{"label": r.label, "count": r.count} for r in package_bands],
             "top_companies": [{"company": r.company, "count": r.count} for r in top_companies],
         }
 
