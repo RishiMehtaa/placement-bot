@@ -28,6 +28,12 @@ class OpportunityDetail {
   final String id;
   final String? company;
   final String? role;
+  final String? duration;
+  final String? internalFormLink;
+  final String? startDate;
+  final String? location;
+  final String? eligible;
+  final String? eligibleReason;
   final String? deadline;
   final String? package;
   final String? jdLink;
@@ -43,6 +49,12 @@ class OpportunityDetail {
     required this.id,
     this.company,
     this.role,
+    this.duration,
+    this.internalFormLink,
+    this.startDate,
+    this.location,
+    this.eligible,
+    this.eligibleReason,
     this.deadline,
     this.package,
     this.jdLink,
@@ -60,6 +72,12 @@ class OpportunityDetail {
       id: json['id'] as String,
       company: json['company'] as String?,
       role: json['role'] as String?,
+      duration: json['duration'] as String?,
+      internalFormLink: json['internal_form_link'] as String?,
+      startDate: json['start_date'] as String?,
+      location: json['location'] as String?,
+      eligible: json['eligible'] as String?,
+      eligibleReason: json['eligible_reason'] as String?,
       deadline: json['deadline'] as String?,
       package: json['package'] as String?,
       jdLink: json['jd_link'] as String?,
