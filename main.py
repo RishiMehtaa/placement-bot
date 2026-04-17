@@ -617,7 +617,7 @@ async def analytics_summary():
             "new_today": today,
             "deadlines_this_week": this_week,
     
-            "top_companies": [{"company": r.company, "count": r.count } for r in top_companies],
+            "top_companies": [{"company": r.company, "count": r.count-1} for r in top_companies],
         }
 
 @app.get("/analytics/timeline")
@@ -633,7 +633,7 @@ async def analytics_timeline():
         rows = result.fetchall()
         return {
             "timeline": [
-                {"date": str(r.date), "count": r.count - 1}
+                {"date": str(r.date), "count": r.count}
                 for r in rows
             ]
         }
