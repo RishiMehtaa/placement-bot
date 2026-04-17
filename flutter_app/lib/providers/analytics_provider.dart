@@ -10,6 +10,7 @@ final analyticsDataProvider = FutureProvider.autoDispose<AnalyticsData>((ref) as
     totalOpportunities: summary.totalOpportunities,
     newToday: summary.newToday,
     deadlinesThisWeek: summary.deadlinesThisWeek,
+    appliedCount: summary.appliedCount,
     deadlineHealth: summary.deadlineHealth
       .map((e) => AnalyticsBucket.fromJson(e))
       .toList(),
@@ -22,6 +23,9 @@ final analyticsDataProvider = FutureProvider.autoDispose<AnalyticsData>((ref) as
     packageBands: summary.packageBands
       .map((e) => AnalyticsBucket.fromJson(e))
       .toList(),
+    appliedCompanies: summary.appliedCompanies
+        .map((e) => TopCompany.fromJson(e))
+        .toList(),
     topCompanies: summary.topCompanies
         .map((e) => TopCompany.fromJson(e))
         .toList(),

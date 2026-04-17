@@ -46,6 +46,24 @@ class ApiService {
     }
   }
 
+  Future<void> updateOpportunityApplied({
+    required String opportunityId,
+    required String role,
+    required bool applied,
+  }) async {
+    try {
+      await _dio.patch(
+        '${AppConstants.opportunitiesEndpoint}/$opportunityId/applied',
+        data: {
+          'role': role,
+          'applied': applied,
+        },
+      );
+    } on DioException catch (e) {
+      throw _handleError(e);
+    }
+  }
+
   Future<AnalyticsSummary> getAnalyticsSummary() async {
     try {
       final response = await _dio.get(AppConstants.analyticsEndpoint);

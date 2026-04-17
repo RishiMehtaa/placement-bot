@@ -46,10 +46,12 @@ class AnalyticsData {
   final int totalOpportunities;
   final int newToday;
   final int deadlinesThisWeek;
+  final int appliedCount;
   final List<AnalyticsBucket> deadlineHealth;
   final List<AnalyticsBucket> eligibilityBreakdown;
   final List<AnalyticsBucket> locationDistribution;
   final List<AnalyticsBucket> packageBands;
+  final List<TopCompany> appliedCompanies;
   final List<TopCompany> topCompanies;
   final List<TimelinePoint> timeline;
 
@@ -57,10 +59,12 @@ class AnalyticsData {
     required this.totalOpportunities,
     required this.newToday,
     required this.deadlinesThisWeek,
+    required this.appliedCount,
     required this.deadlineHealth,
     required this.eligibilityBreakdown,
     required this.locationDistribution,
     required this.packageBands,
+    required this.appliedCompanies,
     required this.topCompanies,
     required this.timeline,
   });

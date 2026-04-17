@@ -2,6 +2,7 @@ class Opportunity {
   final String id;
   final String? company;
   final String? role;
+  final bool applied;
   final String? deadline;
   final String? package;
   final String? jdLink;
@@ -14,6 +15,7 @@ class Opportunity {
     required this.id,
     this.company,
     this.role,
+    this.applied = false,
     this.deadline,
     this.package,
     this.jdLink,
@@ -28,6 +30,7 @@ class Opportunity {
       id: json['id'] as String,
       company: json['company'] as String?,
       role: json['role'] as String?,
+      applied: json['applied'] as bool? ?? false,
       deadline: json['deadline'] as String?,
       package: json['package'] as String?,
       jdLink: json['jd_link'] as String?,
@@ -92,20 +95,24 @@ class AnalyticsSummary {
   final int totalOpportunities;
   final int newToday;
   final int deadlinesThisWeek;
+  final int appliedCount;
   final List<Map<String, dynamic>> deadlineHealth;
   final List<Map<String, dynamic>> eligibilityBreakdown;
   final List<Map<String, dynamic>> locationDistribution;
   final List<Map<String, dynamic>> packageBands;
+  final List<Map<String, dynamic>> appliedCompanies;
   final List<Map<String, dynamic>> topCompanies;
 
   const AnalyticsSummary({
     required this.totalOpportunities,
     required this.newToday,
     required this.deadlinesThisWeek,
+    required this.appliedCount,
     required this.deadlineHealth,
     required this.eligibilityBreakdown,
     required this.locationDistribution,
     required this.packageBands,
+    required this.appliedCompanies,
     required this.topCompanies,
   });
 
@@ -114,6 +121,7 @@ class AnalyticsSummary {
       totalOpportunities: json['total_opportunities'] as int,
       newToday: json['new_today'] as int,
       deadlinesThisWeek: json['deadlines_this_week'] as int,
+      appliedCount: json['applied_count'] as int? ?? 0,
       deadlineHealth: (json['deadline_health'] as List?)
               ?.map((e) => e as Map<String, dynamic>)
               .toList() ??
@@ -129,6 +137,10 @@ class AnalyticsSummary {
       packageBands: (json['package_bands'] as List?)
               ?.map((e) => e as Map<String, dynamic>)
               .toList() ??
+          [],
+        appliedCompanies: (json['applied_companies'] as List?)
+            ?.map((e) => e as Map<String, dynamic>)
+            .toList() ??
           [],
       topCompanies: (json['top_companies'] as List)
           .map((e) => e as Map<String, dynamic>)

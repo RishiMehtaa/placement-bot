@@ -84,7 +84,7 @@ class AnalyticsScreen extends ConsumerWidget {
 
                 // Stat cards
                 GridView.count(
-                  crossAxisCount: isDesktop ? 3 : 2,
+                  crossAxisCount: isDesktop ? 4 : 2,
                   crossAxisSpacing: 12,
                   mainAxisSpacing: 12,
                   shrinkWrap: true,
@@ -108,6 +108,12 @@ class AnalyticsScreen extends ConsumerWidget {
                       value: data.deadlinesThisWeek.toString(),
                       icon: Icons.timer_outlined,
                       color: AppTheme.warning,
+                    ),
+                    StatCard(
+                      label: 'Applied',
+                      value: data.appliedCount.toString(),
+                      icon: Icons.check_circle_outline,
+                      color: AppTheme.primary,
                     ),
                   ],
                 ),
@@ -158,6 +164,13 @@ class AnalyticsScreen extends ConsumerWidget {
                 ],
 
                 // Top companies bar chart
+                if (data.appliedCompanies.isNotEmpty) ...[
+                  _SectionHeader(title: 'Applied Companies'),
+                  const SizedBox(height: 16),
+                  _TopCompaniesChart(companies: data.appliedCompanies),
+                  const SizedBox(height: 32),
+                ],
+
                 if (data.topCompanies.isNotEmpty) ...[
                   _SectionHeader(title: 'Top Hiring Companies'),
                   const SizedBox(height: 16),
@@ -178,6 +191,7 @@ class AnalyticsScreen extends ConsumerWidget {
                     data.eligibilityBreakdown.isEmpty &&
                     data.locationDistribution.isEmpty &&
                     data.packageBands.isEmpty &&
+                  data.appliedCompanies.isEmpty &&
                     data.topCompanies.isEmpty &&
                     data.timeline.isEmpty)
                   Center(

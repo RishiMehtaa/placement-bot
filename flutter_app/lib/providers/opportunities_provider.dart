@@ -20,7 +20,7 @@ final rawOpportunitiesProvider = FutureProvider.autoDispose<OpportunitiesPage>((
   // Fetch all opportunities without pagination for client-side filtering
   return ApiService().getOpportunities(
     page: 1,
-    pageSize: 1000,
+    pageSize: 100,
     search: null,
   );
 });
