@@ -479,7 +479,22 @@ async def get_opportunities(
         if conditions:
             base_query += " WHERE " + " AND ".join(conditions)
 
-        base_query += " ORDER BY f.created_at DESC"
+        # base_query += " ORDER BY f.created_at DESC"
+        base_query += """
+    ORDER BY
+        CASE
+            WHEN f.deadline < NOW() THEN 1
+            ELSE 0
+        END ASC,
+        CASE
+            WHEN f.deadline >= NOW() OR f.deadline IS NULL THEN f.deadline
+        END ASC NULLS LAST,
+        CASE
+            WHEN f.deadline < NOW() THEN f.deadline
+        END DESC NULLS LAST,
+        f.created_at DESC
+"""
+
 
         count_query = f"SELECT COUNT(*) FROM ({base_query}) AS sub"
         count_result = await db.execute(text(count_query), params)
@@ -570,6 +585,12 @@ async def get_opportunity(family_id: str):
             "id": str(row.id),
             "company": row.company,
             "role": row.role,
+            "duration": row.duration,
+            "internal_form_link": row.internal_form_link,
+            "start_date": row.start_date,
+            "location": row.location,
+            "eligible": row.eligible,
+            "eligible_reason": row.eligible_reason,
             "deadline": row.deadline.isoformat() if row.deadline else None,
             "package": row.package,
             "jd_link": row.jd_link,
