@@ -38,7 +38,7 @@ async def save_message(db: AsyncSession, payload: dict) -> tuple[bool, str]:
     Returns (saved: bool, reason: str)
     """
     message_id = payload["message_id"]
-    text = payload["text"]
+    text = payload["text"].replace("\x00", "")
     content_hash = compute_content_hash(text)
 
     # Layer 1: message_id deduplication
