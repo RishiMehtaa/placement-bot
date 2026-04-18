@@ -2,7 +2,7 @@ class AppConstants {
   // Change this to your EC2 IP for local testing against live backend
   // Change to CloudFront URL after 18g deployment
   // static const String baseUrl = 'http://65.1.61.251:8000';
-  static const String baseUrl = 'https://rapid-dist-museum-disabilities.trycloudflare.com';
+static const String baseUrl = 'https://placement-bot.duckdns.org';
   // Optional runtime config via --dart-define values.
   // If these are empty, the app falls back to Google home pages.
   static const String googleSheetId = String.fromEnvironment('GOOGLE_SHEET_ID', defaultValue: '');
