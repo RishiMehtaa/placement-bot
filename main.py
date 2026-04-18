@@ -220,15 +220,18 @@
 
 import asyncio
 from contextlib import asynccontextmanager
+from datetime import datetime
+from urllib.parse import quote
 
-from fastapi import FastAPI, BackgroundTasks, Depends, HTTPException
+from fastapi import FastAPI, BackgroundTasks, Depends, HTTPException, UploadFile, File
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from db.database import get_db, init_db, AsyncSessionLocal
-from db.queries import save_message
+from db.queries import save_message, get_message
 from db.queue import enqueue, get_queue_stats, reset_stale_processing
 from worker.processor import process_single_message, process_pending_messages
 from scraper.receiver import MessagePayload, TEST_MESSAGES
+from extraction.chat_export_parser import parse_chat_export_text
 from utils.logger import get_logger
 from config.settings import settings
 from fastapi import Query
@@ -238,6 +241,10 @@ from pydantic import BaseModel
 
 
 logger = get_logger(__name__)
+
+MAX_CHAT_IMPORT_FILE_BYTES = 2 * 1024 * 1024
+MAX_CHAT_IMPORT_MESSAGES = 200
+CHAT_IMPORT_PER_MESSAGE_TIMEOUT_SECONDS = 35
 
 
 def _normalize_role_text(role: str) -> str:
@@ -313,12 +320,144 @@ app.add_middleware(
 
 @app.get("/health")
 async def health():
+    sheet_url = f"https://docs.google.com/spreadsheets/d/{settings.GOOGLE_SHEET_ID}/edit"
+    if settings.GOOGLE_CALENDAR_ID == "primary":
+        calendar_url = "https://calendar.google.com/calendar/u/0/r"
+    else:
+        encoded_calendar_id = quote(settings.GOOGLE_CALENDAR_ID, safe="")
+        calendar_url = f"https://calendar.google.com/calendar/u/0/r?cid={encoded_calendar_id}"
+
     return {
         "status": "ok",
         "phase": 16,
         "message": "Placement bot is running",
         "scheduler_enabled": settings.SCHEDULER_ENABLED,
         "scheduler_interval_seconds": settings.SCHEDULER_INTERVAL_SECONDS,
+        "google_sheet_url": sheet_url,
+        "google_calendar_url": calendar_url,
+    }
+
+
+@app.post("/chat/import")
+async def import_chat_export(
+    file: UploadFile = File(...),
+    db: AsyncSession = Depends(get_db),
+):
+    filename = (file.filename or "").strip()
+    if not filename.lower().endswith(".txt"):
+        raise HTTPException(status_code=400, detail="Only .txt chat export files are supported")
+
+    content = await file.read()
+    if not content:
+        raise HTTPException(status_code=400, detail="Uploaded file is empty")
+
+    if len(content) > MAX_CHAT_IMPORT_FILE_BYTES:
+        raise HTTPException(
+            status_code=413,
+            detail=f"File too large. Maximum allowed size is {MAX_CHAT_IMPORT_FILE_BYTES // (1024 * 1024)} MB",
+        )
+
+    decoded_text = content.decode("utf-8-sig", errors="replace")
+    parsed = parse_chat_export_text(decoded_text)
+
+    if parsed.parsed_messages == 0:
+        raise HTTPException(status_code=400, detail="No parsable chat messages found in file")
+
+    if parsed.parsed_messages > MAX_CHAT_IMPORT_MESSAGES:
+        raise HTTPException(
+            status_code=413,
+            detail=f"Too many messages in one import. Maximum allowed is {MAX_CHAT_IMPORT_MESSAGES}",
+        )
+
+    accepted = 0
+    skipped = 0
+    processed_success = 0
+    processed_failed = 0
+    results = []
+
+    for payload in parsed.messages:
+        saved, reason = await save_message(db, payload)
+
+        if not saved:
+            skipped += 1
+            results.append(
+                {
+                    "message_id": payload["message_id"],
+                    "status": "skipped",
+                    "reason": reason,
+                }
+            )
+            continue
+
+        accepted += 1
+        await enqueue(db, payload["message_id"])
+
+        try:
+            await asyncio.wait_for(
+                process_single_message(payload["message_id"]),
+                timeout=CHAT_IMPORT_PER_MESSAGE_TIMEOUT_SECONDS,
+            )
+            stored_message = await get_message(db, payload["message_id"])
+            if stored_message and stored_message.processed:
+                processed_success += 1
+                results.append(
+                    {
+                        "message_id": payload["message_id"],
+                        "status": "processed",
+                        "reason": "ok",
+                    }
+                )
+            else:
+                processed_failed += 1
+                results.append(
+                    {
+                        "message_id": payload["message_id"],
+                        "status": "failed",
+                        "reason": "processing_incomplete",
+                    }
+                )
+        except asyncio.TimeoutError:
+            processed_failed += 1
+            logger.warning(
+                "Chat import processing timeout | message_id=%s timeout=%ss",
+                payload["message_id"],
+                CHAT_IMPORT_PER_MESSAGE_TIMEOUT_SECONDS,
+            )
+            results.append(
+                {
+                    "message_id": payload["message_id"],
+                    "status": "failed",
+                    "reason": "processing_timeout",
+                }
+            )
+        except Exception as e:
+            processed_failed += 1
+            logger.error(
+                "Chat import processing failed | message_id=%s error=%s",
+                payload["message_id"],
+                str(e),
+                exc_info=True,
+            )
+            results.append(
+                {
+                    "message_id": payload["message_id"],
+                    "status": "failed",
+                    "reason": "processing_error",
+                }
+            )
+
+    return {
+        "status": "complete",
+        "imported_at": datetime.utcnow().isoformat() + "Z",
+        "filename": filename,
+        "total_lines": parsed.total_lines,
+        "parsed_messages": parsed.parsed_messages,
+        "skipped_lines": parsed.skipped_lines,
+        "accepted": accepted,
+        "skipped": skipped,
+        "processed_success": processed_success,
+        "processed_failed": processed_failed,
+        "results": results,
     }
 
 
