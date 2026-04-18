@@ -1,0 +1,27 @@
+name: Deploy to EC2
+
+on:
+  push:
+    branches:
+      - main
+    paths-ignore:
+      - 'flutter_app/**'
+      - '.github/**'
+      - '**.md'
+
+jobs:
+  deploy-backend:
+    name: Deploy Backend to EC2
+    runs-on: ubuntu-latest
+    steps:
+      - name: Deploy to EC2 via SSH
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.EC2_HOST }}
+          username: ${{ secrets.EC2_USER }}
+          key: ${{ secrets.EC2_SSH_KEY }}
+          script: |
+            cd ~/placement_bot
+            git pull origin main
+            docker compose -f docker-compose.prod.yml up --build -d fastapi
+            docker image prune -f
