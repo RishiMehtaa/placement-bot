@@ -92,6 +92,57 @@ class ApiService {
     }
   }
 
+  Future<Map<String, String>> getIntegrationLinks() async {
+    String sheetUrl = '';
+    String calendarUrl = '';
+
+    try {
+      final response = await _dio.get(AppConstants.healthEndpoint);
+      final data = response.data as Map<String, dynamic>;
+
+      sheetUrl = (data['google_sheet_url'] as String? ?? '').trim();
+      calendarUrl = (data['google_calendar_url'] as String? ?? '').trim();
+    } on DioException {
+      // If health endpoint is unreachable or old, use local fallbacks below.
+    }
+
+    if (sheetUrl.isEmpty) {
+      sheetUrl = AppConstants.googleSheetUrlFallback;
+    }
+    if (calendarUrl.isEmpty) {
+      calendarUrl = AppConstants.googleCalendarUrlFallback;
+    }
+
+    return {
+      'google_sheet_url': sheetUrl,
+      'google_calendar_url': calendarUrl,
+    };
+  }
+
+  Future<Map<String, dynamic>> importChatExportTxt({
+    required List<int> fileBytes,
+    required String fileName,
+  }) async {
+    try {
+      final formData = FormData.fromMap({
+        'file': MultipartFile.fromBytes(
+          fileBytes,
+          filename: fileName,
+        ),
+      });
+
+      final response = await _dio.post(
+        AppConstants.chatImportEndpoint,
+        data: formData,
+        options: Options(contentType: 'multipart/form-data'),
+      );
+
+      return response.data as Map<String, dynamic>;
+    } on DioException catch (e) {
+      throw _handleError(e);
+    }
+  }
+
   String _handleError(DioException e) {
     if (e.type == DioExceptionType.connectionTimeout ||
         e.type == DioExceptionType.receiveTimeout) {

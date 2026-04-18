@@ -165,6 +165,11 @@ final analyticsSummaryProvider = FutureProvider.autoDispose<AnalyticsSummary>((r
   return ApiService().getAnalyticsSummary();
 });
 
+// Integration links provider (Google Sheet + Google Calendar)
+final integrationLinksProvider = FutureProvider.autoDispose<Map<String, String>>((ref) async {
+  return ApiService().getIntegrationLinks();
+});
+
 // Single opportunity provider
 final opportunityDetailProvider = FutureProvider.autoDispose.family<Map<String, dynamic>, String>((ref, id) async {
   return ApiService().getOpportunityDetail(id);

@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
+import 'package:url_launcher/url_launcher.dart';
 import '../core/theme.dart';
 import '../providers/opportunities_provider.dart';
 import '../widgets/stat_card.dart';
@@ -16,6 +17,37 @@ class DashboardScreen extends ConsumerStatefulWidget {
 
 class _DashboardScreenState extends ConsumerState<DashboardScreen> {
   final TextEditingController _searchController = TextEditingController();
+
+  Future<void> _openIntegrationLink(String linkKey, String label) async {
+    try {
+      final links = await ref.read(integrationLinksProvider.future);
+      final targetUrl = links[linkKey] ?? '';
+
+      if (targetUrl.isEmpty) {
+        if (!mounted) return;
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('$label link is not configured yet.')),
+        );
+        return;
+      }
+
+      final uri = Uri.tryParse(targetUrl);
+      if (uri != null && await canLaunchUrl(uri)) {
+        await launchUrl(uri, mode: LaunchMode.externalApplication);
+        return;
+      }
+
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Could not open $label link.')),
+      );
+    } catch (_) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Failed to load $label link.')),
+      );
+    }
+  }
 
   @override
   void dispose() {
@@ -42,11 +74,27 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
             onPressed: () => context.go('/analytics'),
           ),
           IconButton(
+            icon: const Icon(Icons.table_chart_rounded),
+            tooltip: 'Open Google Sheet',
+            onPressed: () => _openIntegrationLink('google_sheet_url', 'Google Sheet'),
+          ),
+          IconButton(
+            icon: const Icon(Icons.calendar_month_rounded),
+            tooltip: 'Open Google Calendar',
+            onPressed: () => _openIntegrationLink('google_calendar_url', 'Google Calendar'),
+          ),
+          IconButton(
+            icon: const Icon(Icons.file_upload_rounded),
+            tooltip: 'Import Chat Export',
+            onPressed: () => context.go('/import'),
+          ),
+          IconButton(
             icon: const Icon(Icons.refresh),
             tooltip: 'Refresh',
             onPressed: () {
               ref.invalidate(opportunitiesProvider);
               ref.invalidate(analyticsSummaryProvider);
+              ref.invalidate(integrationLinksProvider);
             },
           ),
           const SizedBox(width: 8),
@@ -57,6 +105,7 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
         onRefresh: () async {
           ref.invalidate(opportunitiesProvider);
           ref.invalidate(analyticsSummaryProvider);
+          ref.invalidate(integrationLinksProvider);
         },
         child: CustomScrollView(
           slivers: [

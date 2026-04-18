@@ -6,6 +6,7 @@ import '../screens/group_selection_screen.dart';
 import '../screens/dashboard_screen.dart';
 import '../screens/opportunity_detail_screen.dart';
 import '../screens/analytics_screen.dart';
+import '../screens/chat_import_screen.dart';
 
 final appRouter = GoRouter(
   initialLocation: '/',
@@ -37,18 +38,22 @@ final appRouter = GoRouter(
       path: '/analytics',
       builder: (context, state) => const AnalyticsScreen(),
     ),
-    GoRoute(
-  path: '/opportunity/:id',
-  builder: (context, state) {
-    final id = state.pathParameters['id']!;
-    return OpportunityDetailScreen(familyId: id);
-  },
+//     GoRoute(
+//   path: '/opportunity/:id',
+//   builder: (context, state) {
+//     final id = state.pathParameters['id']!;
+//     return OpportunityDetailScreen(familyId: id);
+//   },
   
-),
+// ),
+// GoRoute(
+//   path: '/analytics',
+//   builder: (context, state) => const AnalyticsScreen(),
+// ),
 GoRoute(
-  path: '/analytics',
-  builder: (context, state) => const AnalyticsScreen(),
-),
+      path: '/import',
+      builder: (context, state) => const ChatImportScreen(),
+    ),
   ],
   errorBuilder: (context, state) => Scaffold(
     body: Center(

@@ -163,11 +163,11 @@ class AnalyticsScreen extends ConsumerWidget {
                   const SizedBox(height: 32),
                 ],
 
-                // Top companies bar chart
+                // Companies sections
                 if (data.appliedCompanies.isNotEmpty) ...[
                   _SectionHeader(title: 'Applied Companies'),
                   const SizedBox(height: 16),
-                  _TopCompaniesChart(companies: data.appliedCompanies),
+                  _AppliedCompaniesList(companies: data.appliedCompanies),
                   const SizedBox(height: 32),
                 ],
 
@@ -239,6 +239,75 @@ class _SectionHeader extends StatelessWidget {
         fontSize: 16,
         fontWeight: FontWeight.w600,
         color: AppTheme.textPrimary,
+      ),
+    );
+  }
+}
+
+class _AppliedCompaniesList extends StatelessWidget {
+  final List<TopCompany> companies;
+  const _AppliedCompaniesList({required this.companies});
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        color: AppTheme.surface,
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: AppTheme.border),
+      ),
+      child: Column(
+        children: companies.asMap().entries.map((entry) {
+          final rank = entry.key + 1;
+          final company = entry.value;
+          return Padding(
+            padding: EdgeInsets.only(bottom: rank == companies.length ? 0 : 10),
+            child: Row(
+              children: [
+                Container(
+                  width: 26,
+                  height: 26,
+                  alignment: Alignment.center,
+                  decoration: BoxDecoration(
+                    color: AppTheme.primary.withOpacity(0.15),
+                    borderRadius: BorderRadius.circular(6),
+                  ),
+                  child: Text(
+                    '$rank',
+                    style: const TextStyle(
+                      color: AppTheme.primary,
+                      fontSize: 12,
+                      fontWeight: FontWeight.w700,
+                    ),
+                  ),
+                ),
+                const SizedBox(width: 10),
+                Expanded(
+                  child: Text(
+                    company.company,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: const TextStyle(
+                      color: AppTheme.textPrimary,
+                      fontSize: 13,
+                      fontWeight: FontWeight.w500,
+                    ),
+                  ),
+                ),
+                const SizedBox(width: 10),
+                Text(
+                  '${company.count}',
+                  style: const TextStyle(
+                    color: AppTheme.textSecondary,
+                    fontSize: 13,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+              ],
+            ),
+          );
+        }).toList(),
       ),
     );
   }

@@ -19,6 +19,7 @@ dependencies:
   shimmer: ^3.0.0
   url_launcher: ^6.2.4
   super_icons: ^1.0.3
+  file_picker: ^8.0.7
 
 dev_dependencies:
   flutter_test:
