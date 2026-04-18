@@ -543,3 +543,36 @@ async def get_family_by_message_id(
         .limit(1)
     )
     return result.scalar_one_or_none()
+
+
+def build_opportunities_timeline_query(limit: int = 30):
+    """
+    Build the opportunities-over-time aggregation.
+
+    The timeline should reflect when the opportunity first appeared in the group,
+    so we bucket each family by the earliest linked message timestamp. If a family
+    has no linked messages, we fall back to its own created_at timestamp so older
+    rows still appear deterministically.
+    """
+    family_dates = (
+        select(
+            Family.id.label("family_id"),
+            func.coalesce(func.min(Message.timestamp), Family.created_at).label("date"),
+        )
+        .select_from(Family)
+        .outerjoin(MessageFamilyMap, MessageFamilyMap.family_id == Family.id)
+        .outerjoin(Message, Message.message_id == MessageFamilyMap.message_id)
+        .group_by(Family.id, Family.created_at)
+        .subquery()
+    )
+
+    return (
+        select(
+            family_dates.c.date,
+            func.count().label("count"),
+        )
+        .select_from(family_dates)
+        .group_by(family_dates.c.date)
+        .order_by(family_dates.c.date.asc())
+        .limit(limit)
+    )

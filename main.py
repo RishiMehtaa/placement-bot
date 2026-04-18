@@ -227,7 +227,7 @@ from fastapi import FastAPI, BackgroundTasks, Depends, HTTPException, UploadFile
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from db.database import get_db, init_db, AsyncSessionLocal
-from db.queries import save_message, get_message
+from db.queries import save_message, get_message, build_opportunities_timeline_query
 from db.queue import enqueue, get_queue_stats, reset_stale_processing
 from worker.processor import process_single_message, process_pending_messages
 from scraper.receiver import MessagePayload, TEST_MESSAGES
@@ -955,13 +955,7 @@ async def analytics_summary():
 @app.get("/analytics/timeline")
 async def analytics_timeline():
     async with get_db_context() as db:
-        result = await db.execute(text("""
-            SELECT DATE(created_at) as date, COUNT(*) as count
-            FROM families
-            GROUP BY DATE(created_at)
-            ORDER BY date ASC
-            LIMIT 30
-        """))
+        result = await db.execute(build_opportunities_timeline_query(limit=30))
         rows = result.fetchall()
         return {
             "timeline": [
