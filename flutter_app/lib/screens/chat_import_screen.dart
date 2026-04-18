@@ -75,10 +75,11 @@ class _ChatImportScreenState extends State<ChatImportScreen> {
         _errorMessage = e.toString();
       });
     } finally {
-      if (!mounted) return;
-      setState(() {
-        _isImporting = false;
-      });
+      if (mounted) {
+        setState(() {
+          _isImporting = false;
+        });
+      }
     }
   }
 
@@ -175,7 +176,7 @@ class _ChatImportScreenState extends State<ChatImportScreen> {
                 Container(
                   padding: const EdgeInsets.all(14),
                   decoration: BoxDecoration(
-                    color: AppTheme.error.withOpacity(0.2),
+                    color: AppTheme.error.withValues(alpha: 0.2),
                     borderRadius: BorderRadius.circular(10),
                     border: Border.all(color: AppTheme.error),
                   ),
@@ -240,7 +241,7 @@ class _SummaryChip extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
       decoration: BoxDecoration(
-        color: AppTheme.primary.withOpacity(0.15),
+        color: AppTheme.primary.withValues(alpha: 0.15),
         borderRadius: BorderRadius.circular(10),
         border: Border.all(color: AppTheme.border),
       ),
