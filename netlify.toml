@@ -5,7 +5,7 @@
     git clone https://github.com/flutter/flutter.git --depth 1 --branch stable $HOME/flutter &&
     export PATH="$PATH:$HOME/flutter/bin" &&
     flutter doctor &&
-    flutter build web --web-renderer html --release
+    flutter build web --release
   """
 
 [[redirects]]
