@@ -128,7 +128,9 @@ flutter pub get
 flutter run -d chrome --web-port 8080
 ```
 
-Note: Chat export size must be less than 40kb.
+## Note: 
+Chat export size must be less than 40kb.
+
 ---
 
 ## 🔮 Future Scope
