@@ -56,7 +56,7 @@ Built on EC2, RDS PostgreSQL, and SQS — designed to run 24/7 without manual in
 
 ## 🏗️ Architecture
 
-
+<img width="1119" height="741" alt="Image" src="https://github.com/user-attachments/assets/cbe5a543-f389-4d16-8fc1-63e5fe688ddc" />
 
 ---
 
