@@ -90,8 +90,7 @@ Built on EC2, RDS PostgreSQL, and SQS — designed to run 24/7 without manual in
 
 ### 🎥 Demo
 
-
-
+<video src="https://github.com/user-attachments/assets/3a324c17-1355-4772-9ba1-19db640428fe" controls width="100%"></video>
 
 ---
 
