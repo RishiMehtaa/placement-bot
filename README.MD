@@ -52,6 +52,10 @@ Understand the bigger picture — which companies have visited, what roles are t
 ### Production-Grade AWS Infrastructure
 Built on EC2, RDS PostgreSQL, and SQS — designed to run 24/7 without manual intervention, with Docker-based deployment for reliability and consistency.
 
+## Note:
+PlacementBot currently supports only my placement group because supporting multiple users with Baileys would require a separate persistent WhatsApp session and processing pipeline for every user, which was too costly and infrastructure-heavy for the current scope. In the future, I plan to move to a multi-user architecture using the official WhatsApp Business API or a similar scalable solution.
+
+
 ---
 
 ## Try it out
@@ -123,6 +127,8 @@ cd flutter_app
 flutter pub get
 flutter run -d chrome --web-port 8080
 ```
+
+Note: Chat export size must be less than 40kb.
 ---
 
 ## 🔮 Future Scope
