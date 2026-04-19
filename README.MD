@@ -1,4 +1,4 @@
-# PlacementBot — WhatsApp Placement Intelligence System
+# PlacementBot
 
 Your CGPA is fine. Your resume is ready. Your preparation is solid. And yet, the thing most likely to cost you a placement isn't any of that - it's a message you didn't see in time. One missed message is all it takes to lose an opportunity you'd been preparing for since years. Somewhere in your placement group right now, there's a message that matters. Maybe a deadline got moved up. Maybe a new JD just dropped. Are you sure you saw it?
 
@@ -127,32 +127,32 @@ flutter run -d chrome --web-port 8080
 
 ## 🔮 Future Scope
 
-### 🏫 Multi-College Support
+### Multi-College Support
 Currently built for a single college's placement group. The architecture can be extended to support multiple colleges, each with their own WhatsApp group, database namespace, and dashboard — making PlacementBot a platform, not just a personal tool.
 
-### 🔔 Push Notifications
+### Push Notifications
 Deadline changes and new opportunities currently sync to Google Calendar. A dedicated push notification layer — via Firebase Cloud Messaging — would deliver instant alerts to the mobile app the moment a critical update is detected.
 
-### 📤 Student-Side Applications
+### Student-Side Applications
 Allow students to apply directly to opportunities from within the app — auto-filling forms, tracking application status, and maintaining a personal placement history across companies and roles.
 
-### 🤝 Placement Cell Dashboard
+### Placement Cell Dashboard
 A separate admin-facing dashboard for placement coordinators — letting them post opportunities directly, track student applications, and monitor group message processing in real time.
 
-### 📊 Advanced Analytics
+### Advanced Analytics
 Expand beyond basic placement tracking to deeper insights — offer acceptance rates, average packages by branch and batch, company visit frequency, and year-over-year placement trends.
 
-### 🌐 Official WhatsApp Business API
+### Official WhatsApp Business API
 Replace Baileys with the official WhatsApp Business API for a production-grade, ToS-compliant integration — enabling the system to scale without the risk of session bans or unofficial API breakage.
 
-### 🧠 Smarter LLM Pipeline
+### Smarter LLM Pipeline
 Move from a single LLM call to a multi-agent pipeline — one agent for extraction, one for verification, one for eligibility scoring — improving accuracy on ambiguous and noisy placement messages.
 
-### 📥 Resume Screening Integration
+### Resume Screening Integration
 Cross-reference extracted job requirements against a student's uploaded resume — automatically flagging roles where the student is a strong match beyond just branch and CGPA filters.
 
 ---
 
 ## Author
 
-Built by  [Rishi Mehta](www.linkedin.com/in/rishimehta1607) · 
+Built by  [Rishi Mehta](https://www.linkedin.com/in/rishimehta1607) · 
