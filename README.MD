@@ -85,8 +85,8 @@ Built on EC2, RDS PostgreSQL, and SQS — designed to run 24/7 without manual in
 
 | Platform | Link |
 |----------|------|
-| 🌐 Web Dashboard | [placement-bot.duckdns.org](https://placement-bot.duckdns.org) |
-| 📱 Android APK | [Download latest release] |
+| 🌐 Web Dashboard | [placement-bot.duckdns.org](https://placement-bot.netlify.app/) |
+| 📱 Android APK | [Download latest release](https://github.com/RishiMehtaa/placement_bot/releases/latest) |
 
 ### 🎥 Demo
 
