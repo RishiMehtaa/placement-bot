@@ -54,6 +54,19 @@ Built on EC2, RDS PostgreSQL, and SQS — designed to run 24/7 without manual in
 
 ---
 
+## Try it out
+
+| Platform | Link |
+|----------|------|
+| 🌐 Web Dashboard | [placement-bot.duckdns.org](https://placement-bot.netlify.app/) |
+| 📱 Android APK | [Download latest release](https://github.com/RishiMehtaa/placement_bot/releases/latest) |
+
+### 🎥 Demo
+
+<video src="https://github.com/user-attachments/assets/3a324c17-1355-4772-9ba1-19db640428fe" controls width="100%"></video>
+
+---
+
 ## 🏗️ Architecture
 
 <img width="1119" height="741" alt="Image" src="https://github.com/user-attachments/assets/cbe5a543-f389-4d16-8fc1-63e5fe688ddc" />
@@ -78,19 +91,6 @@ Built on EC2, RDS PostgreSQL, and SQS — designed to run 24/7 without manual in
 | **Flutter (Stable)** | Mobile app + web dashboard | Single codebase compiles to Android APK, iOS IPA, and web. Riverpod for state, Dio for API calls, fl_chart for analytics |
 | **Netlify** | Flutter web hosting | Zero-config static hosting with automatic HTTPS and instant deploys from the Flutter web build output |
 | **GitHub Actions** | CI/CD | On every push to `main`, SSHs into EC2, pulls latest code, and restarts the FastAPI container automatically |
-
----
-
-## Try it out
-
-| Platform | Link |
-|----------|------|
-| 🌐 Web Dashboard | [placement-bot.duckdns.org](https://placement-bot.netlify.app/) |
-| 📱 Android APK | [Download latest release](https://github.com/RishiMehtaa/placement_bot/releases/latest) |
-
-### 🎥 Demo
-
-<video src="https://github.com/user-attachments/assets/3a324c17-1355-4772-9ba1-19db640428fe" controls width="100%"></video>
 
 ---
 
